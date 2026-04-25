@@ -9,7 +9,7 @@ import com.jarvis.githubissues.model.IssueContext
 import com.jarvis.githubissues.model.IssueDraft
 import com.jarvis.githubissues.model.IssueEvent
 import com.jarvis.githubissues.queue.IssueQueue
-import com.jarvis.githubissues.settings.GitHubIssueSettingsRepository
+import com.jarvis.githubissues.settings.SettingsSource
 
 /**
  * Central facade. Every subsystem in Jarvis routes its failure / refusal /
@@ -23,7 +23,7 @@ import com.jarvis.githubissues.settings.GitHubIssueSettingsRepository
  *   4. emits the corresponding OpenClaw session event.
  */
 class GitHubIssueLogger(
-    private val settingsRepo: GitHubIssueSettingsRepository,
+    private val settingsRepo: SettingsSource,
     private val deduper: IssueDeduplicator,
     private val bodyBuilder: IssueBodyBuilder,
     private val client: GitHubApiClient,

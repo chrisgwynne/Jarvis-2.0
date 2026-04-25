@@ -1,7 +1,7 @@
 package com.jarvis.githubissues.api
 
 import com.jarvis.githubissues.model.IssueDraft
-import com.jarvis.githubissues.settings.GitHubIssueSettingsRepository
+import com.jarvis.githubissues.settings.SettingsSource
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -14,8 +14,8 @@ import java.net.URL
  * All calls are synchronous — the caller is expected to be on a background
  * coroutine / executor (the orchestrator and queue worker both are).
  */
-class GitHubApiClient(
-    private val settingsRepo: GitHubIssueSettingsRepository,
+open class GitHubApiClient(
+    private val settingsRepo: SettingsSource,
     private val baseUrl: String = "https://api.github.com",
     private val userAgent: String = "Jarvis-IssueLogger"
 ) {
@@ -25,7 +25,7 @@ class GitHubApiClient(
         data class Failure(val httpStatus: Int?, val message: String, val transient: Boolean) : Result()
     }
 
-    fun testConnection(): Result {
+    open fun testConnection(): Result {
         val s = settingsRepo.current()
         if (s.owner.isBlank() || s.repo.isBlank()) {
             return Result.Failure(null, "owner/repo not configured", transient = false)
@@ -39,7 +39,7 @@ class GitHubApiClient(
         }
     }
 
-    fun createIssue(draft: IssueDraft): Result {
+    open fun createIssue(draft: IssueDraft): Result {
         val s = settingsRepo.current()
         if (s.owner.isBlank() || s.repo.isBlank()) {
             return Result.Failure(null, "owner/repo not configured", transient = false)
@@ -60,7 +60,7 @@ class GitHubApiClient(
         }
     }
 
-    fun commentOnIssue(issueNumber: Int, body: String): Result {
+    open fun commentOnIssue(issueNumber: Int, body: String): Result {
         val s = settingsRepo.current()
         val token = settingsRepo.token()
             ?: return Result.Failure(null, "token not configured", transient = false)

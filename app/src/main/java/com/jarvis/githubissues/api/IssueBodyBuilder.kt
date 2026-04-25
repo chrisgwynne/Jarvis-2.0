@@ -106,7 +106,10 @@ class IssueBodyBuilder(
                 appendLine("- $cap: `${if (ok) "available" else "unavailable"}`")
             }
         }
-        ctx.capability.notes?.let { appendLine().also { appendLine(redact(it)) } }
+        ctx.capability.notes?.let { notes ->
+            appendLine()
+            appendLine(redact(notes))
+        }
         appendLine()
 
         appendLine("## Session")

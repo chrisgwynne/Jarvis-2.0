@@ -14,14 +14,14 @@ import kotlinx.coroutines.flow.asStateFlow
 class GitHubIssueSettingsRepository(
     context: Context,
     private val tokenStore: SecureTokenStore = SecureTokenStore(context)
-) {
+) : SettingsSource {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<GitHubIssueLoggingSettings> = _settings.asStateFlow()
 
-    fun current(): GitHubIssueLoggingSettings = _settings.value
+    override fun current(): GitHubIssueLoggingSettings = _settings.value
 
     fun update(transform: (GitHubIssueLoggingSettings) -> GitHubIssueLoggingSettings) {
         val next = transform(_settings.value).copy(tokenConfigured = tokenStore.hasToken())
@@ -34,7 +34,7 @@ class GitHubIssueSettingsRepository(
         update { it }
     }
 
-    fun token(): String? = tokenStore.getToken()
+    override fun token(): String? = tokenStore.getToken()
 
     private fun load(): GitHubIssueLoggingSettings {
         val redaction = RedactionSettings(
