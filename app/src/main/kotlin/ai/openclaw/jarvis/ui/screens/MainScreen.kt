@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.openclaw.jarvis.data.models.GatewayState
 import ai.openclaw.jarvis.data.models.RouteChoice
+import ai.openclaw.jarvis.trust.TrustLevel
 import ai.openclaw.jarvis.ui.components.*
 import ai.openclaw.jarvis.ui.theme.*
 import ai.openclaw.jarvis.ui.viewmodel.MainViewModel
@@ -37,6 +38,7 @@ fun MainScreen(
     val queueSize           by viewModel.queueSize.collectAsStateWithLifecycle()
     val lastResult          by viewModel.lastResult.collectAsStateWithLifecycle()
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
+    val sessionTrust        by viewModel.sessionTrust.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = BlueprintBackground,
@@ -83,6 +85,33 @@ fun MainScreen(
             ) {
                 ConnectionStatusBadge(state = gatewayState, queueSize = queueSize)
                 RouteChip(route = lastRoute)
+            }
+
+            // Speaker identity badge
+            sessionTrust?.let { trust ->
+                if (trust.isActive) {
+                    val trustColor = when (trust.trustLevel) {
+                        TrustLevel.OWNER   -> CobaltGlow
+                        TrustLevel.TRUSTED -> StatusConnected
+                        TrustLevel.GUEST   -> StatusQueued
+                        TrustLevel.UNKNOWN -> TextDim
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${trust.speakerId} · ${trust.trustLevel.name.lowercase()}",
+                            color = trustColor,
+                            fontSize = 11.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            letterSpacing = 1.sp,
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(16.dp))

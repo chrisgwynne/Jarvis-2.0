@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import ai.openclaw.jarvis.trust.TrustLevel
 import ai.openclaw.jarvis.ui.theme.*
 import ai.openclaw.jarvis.ui.viewmodel.SettingsViewModel
 
@@ -141,6 +142,53 @@ fun SettingsScreen(
                 )
             }
 
+            // ── Identity ──────────────────────────────────────────────────────
+            SettingsSection(title = "IDENTITY") {
+                SettingsInfoRow(label = "Enrolled Profiles", value = "${viewModel.enrolledProfileCount}")
+                if (viewModel.enrolledProfiles.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        viewModel.enrolledProfiles.forEach { profile ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    profile.displayName,
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                )
+                                Text(
+                                    profile.trustLevel.name.lowercase(),
+                                    color = when (profile.trustLevel) {
+                                        TrustLevel.OWNER   -> CobaltGlow
+                                        TrustLevel.TRUSTED -> StatusConnected
+                                        TrustLevel.GUEST   -> StatusQueued
+                                        TrustLevel.UNKNOWN -> TextDim
+                                    },
+                                    fontSize = 11.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                )
+                            }
+                        }
+                    }
+                }
+                SettingsSlider(
+                    label    = "Session Timeout",
+                    value    = settings.sessionTimeoutMinutes.toFloat(),
+                    range    = 5f..60f,
+                    steps    = 10,
+                    format   = { "${it.toInt()} min" },
+                    onChange = { viewModel.updateSessionTimeout(it.toInt()) },
+                )
+                Text(
+                    text = "Say \"enrol my voice\" to add a voice profile.",
+                    color = TextDim,
+                    fontSize = 11.sp,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                )
+            }
+
             // ── Android Capabilities ───────────────────────────────────────────
             SettingsSection(title = "ANDROID CAPABILITIES") {
                 CapabilityStatusList(capabilities = viewModel.capabilityStatus)
@@ -168,6 +216,22 @@ fun SettingsScreen(
                     value    = settings.confirmDestructive,
                     onChange = viewModel::updateConfirmDestructive,
                 )
+                HorizontalDivider(color = BlueprintBorder, modifier = Modifier.padding(vertical = 4.dp))
+                SettingsToggle(
+                    label    = "Conversation Recording",
+                    value    = settings.conversationRecordingEnabled,
+                    onChange = viewModel::updateRecordingEnabled,
+                )
+                if (settings.conversationRecordingEnabled) {
+                    SettingsSlider(
+                        label    = "Auto-Delete After",
+                        value    = settings.recordingRetentionHours.toFloat(),
+                        range    = 1f..168f,
+                        steps    = 6,
+                        format   = { if (it < 24) "${it.toInt()}h" else "${(it / 24).toInt()}d" },
+                        onChange = { viewModel.updateRecordingRetention(it.toInt()) },
+                    )
+                }
             }
 
             // ── Debug ─────────────────────────────────────────────────────────

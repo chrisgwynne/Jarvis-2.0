@@ -9,6 +9,7 @@ import ai.openclaw.jarvis.data.models.RouteChoice
 import ai.openclaw.jarvis.network.GatewayEvent
 import ai.openclaw.jarvis.network.OpenClawClient
 import ai.openclaw.jarvis.session.SessionEventLogger
+import ai.openclaw.jarvis.trust.SessionTrust
 import ai.openclaw.jarvis.voice.ConfirmationRequest
 import ai.openclaw.jarvis.voice.TranscriptEntry
 import ai.openclaw.jarvis.voice.VoiceFrontend
@@ -30,6 +31,7 @@ class MainViewModel @Inject constructor(
     val partialText: StateFlow<String>                        = voiceFrontend.partialText
     val gatewayState: StateFlow<GatewayState>                 = gatewayClient.gatewayState
     val pendingConfirmation: StateFlow<ConfirmationRequest?>  = voiceFrontend.pendingConfirmation
+    val sessionTrust: StateFlow<SessionTrust?>                = voiceFrontend.sessionTrust
 
     val queueSize: StateFlow<Int> = offlineQueue.queueSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)

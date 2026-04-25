@@ -7,6 +7,8 @@ import ai.openclaw.jarvis.capabilities.CapabilityRegistry
 import ai.openclaw.jarvis.data.local.JarvisSettings
 import ai.openclaw.jarvis.data.local.PairingStore
 import ai.openclaw.jarvis.data.local.SettingsDataStore
+import ai.openclaw.jarvis.identity.SpeakerIdentityManager
+import ai.openclaw.jarvis.identity.SpeakerProfile
 import ai.openclaw.jarvis.voice.AlwaysListeningService
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,6 +24,7 @@ class SettingsViewModel @Inject constructor(
     private val store: SettingsDataStore,
     private val pairingStore: PairingStore,
     private val registry: CapabilityRegistry,
+    private val identityManager: SpeakerIdentityManager,
 ) : ViewModel() {
 
     val settings: StateFlow<JarvisSettings> = store.settings
@@ -32,6 +35,9 @@ class SettingsViewModel @Inject constructor(
 
     val capabilityStatus: List<Pair<String, Boolean>> get() =
         registry.all.map { it.id to it.isAvailable() }
+
+    val enrolledProfiles: List<SpeakerProfile> get() = identityManager.getAllProfiles()
+    val enrolledProfileCount: Int get() = identityManager.getAllProfiles().size
 
     fun updateGatewayUrl(v: String)         = viewModelScope.launch { store.updateGatewayUrl(v) }
     fun updateGatewayEnabled(v: Boolean)    = viewModelScope.launch { store.updateGatewayEnabled(v) }
@@ -53,6 +59,9 @@ class SettingsViewModel @Inject constructor(
     fun updateConfirmDestructive(v: Boolean)= viewModelScope.launch { store.updateConfirmDestructive(v) }
     fun updateSendLocation(v: Boolean)      = viewModelScope.launch { store.updateSendLocation(v) }
     fun updateSendScreen(v: Boolean)        = viewModelScope.launch { store.updateSendScreen(v) }
-    fun updateDebugLogs(v: Boolean)         = viewModelScope.launch { store.updateDebugLogs(v) }
-    fun clearPairing()                      = pairingStore.clearPairing()
+    fun updateDebugLogs(v: Boolean)          = viewModelScope.launch { store.updateDebugLogs(v) }
+    fun updateSessionTimeout(v: Int)         = viewModelScope.launch { store.updateSessionTimeout(v) }
+    fun updateRecordingEnabled(v: Boolean)   = viewModelScope.launch { store.updateRecordingEnabled(v) }
+    fun updateRecordingRetention(v: Int)     = viewModelScope.launch { store.updateRecordingRetention(v) }
+    fun clearPairing()                       = pairingStore.clearPairing()
 }

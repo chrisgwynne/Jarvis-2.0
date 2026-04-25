@@ -83,11 +83,17 @@ class OpenClawClient @Inject constructor(
         text: String,
         sessionKey: String,
         eventId: String,
+        speaker: String? = null,
+        trustLevel: String? = null,
+        identityConfidence: Float? = null,
     ) = sendFrame(
         UserMessageFrame(
-            sessionKey = sessionKey,
-            text = text,
-            eventId = eventId,
+            sessionKey          = sessionKey,
+            text                = text,
+            eventId             = eventId,
+            speaker             = speaker,
+            trustLevel          = trustLevel,
+            identityConfidence  = identityConfidence,
         )
     )
 

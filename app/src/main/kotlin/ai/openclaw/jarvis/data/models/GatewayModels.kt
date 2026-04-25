@@ -36,6 +36,9 @@ data class UserMessageFrame(
     val text: String,
     val mode: String = "voice",
     val eventId: String,
+    val speaker: String? = null,
+    val trustLevel: String? = null,
+    val identityConfidence: Float? = null,
 )
 
 @Serializable

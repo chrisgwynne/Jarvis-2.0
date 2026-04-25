@@ -252,6 +252,36 @@ class IntentParser @Inject constructor() {
                 { copy(contact = contact, messageBody = body, channel = MessageChannel.BEST_AVAILABLE) }
             },
         ),
+
+        // ── Voice enrolment ───────────────────────────────────────────────────
+        Rule(
+            patterns = listOf(
+                Regex("""(enrol|enroll).{0,10}(my\s+)?voice""", IC),
+                Regex("""add\s+(voice\s+)?profile""", IC),
+                Regex("""(train|teach).{0,10}(my\s+)?voice""", IC),
+                Regex("""register.{0,10}(my\s+)?voice""", IC),
+            ),
+            type = IntentType.ENROL_VOICE,
+            confidence = 0.97f,
+        ),
+
+        // ── Recording ─────────────────────────────────────────────────────────
+        Rule(
+            patterns = listOf(
+                Regex("""start\s+(recording|saving)\s+(conversation|session|this|audio)""", IC),
+                Regex("""(begin|start)\s+recording""", IC),
+            ),
+            type = IntentType.RECORDING_START,
+            confidence = 0.97f,
+        ),
+        Rule(
+            patterns = listOf(
+                Regex("""stop\s+recording""", IC),
+                Regex("""(end|finish|stop)\s+(saving|recording)""", IC),
+            ),
+            type = IntentType.RECORDING_STOP,
+            confidence = 0.97f,
+        ),
     )
 
     // ─── Public API ───────────────────────────────────────────────────────────

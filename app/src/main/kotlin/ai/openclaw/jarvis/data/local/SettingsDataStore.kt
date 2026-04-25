@@ -39,6 +39,11 @@ data class JarvisSettings(
     val sendLocationContext: Boolean = false,
     val sendScreenContext: Boolean = false,
     val debugLogsEnabled: Boolean = false,
+    // Identity / session
+    val sessionTimeoutMinutes: Int = 15,
+    // Recording
+    val conversationRecordingEnabled: Boolean = false,
+    val recordingRetentionHours: Int = 24,
 )
 
 @Singleton
@@ -62,10 +67,13 @@ class SettingsDataStore @Inject constructor(
         val PTT_ENABLED           = booleanPreferencesKey("ptt_enabled")
         val BLUETOOTH_AUDIO       = booleanPreferencesKey("bluetooth_audio_enabled")
         val TRUSTED_MODE          = booleanPreferencesKey("trusted_mode")
-        val CONFIRM_DESTRUCTIVE = booleanPreferencesKey("confirm_destructive")
-        val SEND_LOCATION     = booleanPreferencesKey("send_location_context")
-        val SEND_SCREEN       = booleanPreferencesKey("send_screen_context")
-        val DEBUG_LOGS        = booleanPreferencesKey("debug_logs")
+        val CONFIRM_DESTRUCTIVE   = booleanPreferencesKey("confirm_destructive")
+        val SEND_LOCATION         = booleanPreferencesKey("send_location_context")
+        val SEND_SCREEN           = booleanPreferencesKey("send_screen_context")
+        val DEBUG_LOGS            = booleanPreferencesKey("debug_logs")
+        val SESSION_TIMEOUT       = stringPreferencesKey("session_timeout_minutes")
+        val RECORDING_ENABLED     = booleanPreferencesKey("conversation_recording_enabled")
+        val RECORDING_RETENTION   = stringPreferencesKey("recording_retention_hours")
     }
 
     val settings: Flow<JarvisSettings> = store.data.map { prefs ->
@@ -85,9 +93,12 @@ class SettingsDataStore @Inject constructor(
             bluetoothAudioEnabled  = prefs[Keys.BLUETOOTH_AUDIO]     ?: true,
             trustedMode            = prefs[Keys.TRUSTED_MODE]        ?: false,
             confirmDestructive = prefs[Keys.CONFIRM_DESTRUCTIVE] ?: true,
-            sendLocationContext = prefs[Keys.SEND_LOCATION]      ?: false,
-            sendScreenContext  = prefs[Keys.SEND_SCREEN]         ?: false,
-            debugLogsEnabled   = prefs[Keys.DEBUG_LOGS]          ?: false,
+            sendLocationContext        = prefs[Keys.SEND_LOCATION]          ?: false,
+            sendScreenContext          = prefs[Keys.SEND_SCREEN]            ?: false,
+            debugLogsEnabled          = prefs[Keys.DEBUG_LOGS]             ?: false,
+            sessionTimeoutMinutes     = prefs[Keys.SESSION_TIMEOUT]?.toIntOrNull() ?: 15,
+            conversationRecordingEnabled = prefs[Keys.RECORDING_ENABLED]   ?: false,
+            recordingRetentionHours   = prefs[Keys.RECORDING_RETENTION]?.toIntOrNull() ?: 24,
         )
     }
 
@@ -106,7 +117,10 @@ class SettingsDataStore @Inject constructor(
     suspend fun updateBluetoothAudio(v: Boolean)    = store.edit { it[Keys.BLUETOOTH_AUDIO]    = v }
     suspend fun updateTrustedMode(v: Boolean)     = store.edit { it[Keys.TRUSTED_MODE]      = v }
     suspend fun updateConfirmDestructive(v: Boolean) = store.edit { it[Keys.CONFIRM_DESTRUCTIVE] = v }
-    suspend fun updateSendLocation(v: Boolean)    = store.edit { it[Keys.SEND_LOCATION]     = v }
-    suspend fun updateSendScreen(v: Boolean)      = store.edit { it[Keys.SEND_SCREEN]       = v }
-    suspend fun updateDebugLogs(v: Boolean)       = store.edit { it[Keys.DEBUG_LOGS]        = v }
+    suspend fun updateSendLocation(v: Boolean)       = store.edit { it[Keys.SEND_LOCATION]       = v }
+    suspend fun updateSendScreen(v: Boolean)         = store.edit { it[Keys.SEND_SCREEN]         = v }
+    suspend fun updateDebugLogs(v: Boolean)          = store.edit { it[Keys.DEBUG_LOGS]          = v }
+    suspend fun updateSessionTimeout(v: Int)         = store.edit { it[Keys.SESSION_TIMEOUT]     = v.toString() }
+    suspend fun updateRecordingEnabled(v: Boolean)   = store.edit { it[Keys.RECORDING_ENABLED]  = v }
+    suspend fun updateRecordingRetention(v: Int)     = store.edit { it[Keys.RECORDING_RETENTION] = v.toString() }
 }

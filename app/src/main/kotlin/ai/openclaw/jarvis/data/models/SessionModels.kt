@@ -41,6 +41,16 @@ data class SessionResult(
     val error: String? = null,
 )
 
+// ─── Speaker identity context ─────────────────────────────────────────────────
+
+@Serializable
+data class SpeakerContext(
+    val speakerId: String,
+    val trustLevel: String,
+    val confidence: Float,
+    val verificationMethod: String,
+)
+
 // ─── Full session event (sent to OpenClaw) ────────────────────────────────────
 
 @Serializable
@@ -55,6 +65,7 @@ data class SessionEvent(
     val androidContext: AndroidContext,
     val result: SessionResult,
     val memoryCandidate: Boolean,
+    val speakerContext: SpeakerContext? = null,
 )
 
 // ─── Queued (offline) event wrapper ───────────────────────────────────────────

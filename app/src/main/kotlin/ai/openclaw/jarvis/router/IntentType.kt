@@ -34,6 +34,15 @@ enum class IntentType {
 
     /** Local capture + OpenClaw reasoning (screenshot + context, "send this") */
     MIXED_ACTION,
+
+    /** "enrol my voice", "add voice profile", "train my voice" */
+    ENROL_VOICE,
+
+    /** "start recording conversation" */
+    RECORDING_START,
+
+    /** "stop recording" */
+    RECORDING_STOP,
 }
 
 /** Communication channel preference extracted from the utterance. */
