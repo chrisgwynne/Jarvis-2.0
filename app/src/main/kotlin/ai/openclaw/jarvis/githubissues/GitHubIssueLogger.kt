@@ -10,6 +10,7 @@ import ai.openclaw.jarvis.githubissues.model.IssueDraft
 import ai.openclaw.jarvis.githubissues.model.IssueEvent
 import ai.openclaw.jarvis.githubissues.queue.IssueQueue
 import ai.openclaw.jarvis.githubissues.settings.SettingsSource
+import ai.openclaw.jarvis.githubissues.ui.RecentIssueLog
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,6 +33,7 @@ class GitHubIssueLogger @Inject constructor(
     private val client: GitHubApiClient,
     private val queue: IssueQueue,
     private val openClaw: OpenClawSessionBridge,
+    private val recentLog: RecentIssueLog = RecentIssueLog(),
 ) {
     sealed class Outcome {
         data class Created(val issueNumber: Int, val htmlUrl: String) : Outcome()
@@ -114,15 +116,40 @@ class GitHubIssueLogger @Inject constructor(
             is GitHubApiClient.Result.Success -> {
                 deduper.attachIssueNumber(fingerprint, r.issueNumber)
                 openClaw.onIssueCreated(draft, r.issueNumber, r.htmlUrl)
+                recentLog.record(RecentIssueLog.Entry(
+                    timestampMillis = System.currentTimeMillis(),
+                    title = draft.title,
+                    status = RecentIssueLog.Status.CREATED,
+                    severity = draft.severity,
+                    category = draft.category,
+                    htmlUrl = r.htmlUrl,
+                    occurrenceCount = occurrenceCount,
+                ))
                 Outcome.Created(r.issueNumber, r.htmlUrl)
             }
             is GitHubApiClient.Result.Failure -> {
                 if (r.transient) {
                     queue.enqueue(draft, lastError = r.message)
                     openClaw.onIssueQueued(draft, r.message)
+                    recentLog.record(RecentIssueLog.Entry(
+                        timestampMillis = System.currentTimeMillis(),
+                        title = draft.title,
+                        status = RecentIssueLog.Status.QUEUED,
+                        severity = draft.severity,
+                        category = draft.category,
+                        message = r.message,
+                    ))
                     Outcome.Queued(r.message)
                 } else {
                     openClaw.onIssueFailed(draft, r.message)
+                    recentLog.record(RecentIssueLog.Entry(
+                        timestampMillis = System.currentTimeMillis(),
+                        title = draft.title,
+                        status = RecentIssueLog.Status.FAILED,
+                        severity = draft.severity,
+                        category = draft.category,
+                        message = r.message,
+                    ))
                     Outcome.Failed(r.message)
                 }
             }
@@ -137,6 +164,14 @@ class GitHubIssueLogger @Inject constructor(
             val comment = bodyBuilder.renderOccurrenceComment(event, decision.occurrenceCount)
             client.commentOnIssue(number, comment)
         }
+        recentLog.record(RecentIssueLog.Entry(
+            timestampMillis = System.currentTimeMillis(),
+            title = "[suppressed] ${event.shortDescription}",
+            status = RecentIssueLog.Status.SUPPRESSED,
+            severity = event.severity,
+            category = event.category,
+            occurrenceCount = decision.occurrenceCount,
+        ))
         return Outcome.Suppressed(decision.occurrenceCount, number)
     }
 
@@ -157,5 +192,15 @@ class GitHubIssueLogger @Inject constructor(
     fun onQueuedIssuePosted(draft: IssueDraft, issueNumber: Int, htmlUrl: String) {
         deduper.attachIssueNumber(draft.fingerprint, issueNumber)
         openClaw.onIssueCreated(draft, issueNumber, htmlUrl)
+        recentLog.record(RecentIssueLog.Entry(
+            timestampMillis = System.currentTimeMillis(),
+            title = draft.title,
+            status = RecentIssueLog.Status.CREATED,
+            severity = draft.severity,
+            category = draft.category,
+            htmlUrl = htmlUrl,
+            occurrenceCount = draft.occurrenceCount,
+            message = "drained from offline queue",
+        ))
     }
 }
