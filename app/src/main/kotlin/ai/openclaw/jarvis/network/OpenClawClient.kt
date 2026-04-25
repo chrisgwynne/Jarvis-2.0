@@ -43,6 +43,15 @@ class OpenClawClient @Inject constructor(
     private val _events = MutableSharedFlow<GatewayEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<GatewayEvent> = _events.asSharedFlow()
 
+    /**
+     * Every raw WebSocket text frame, exposed for the typed protocol layer
+     * (see [ai.openclaw.jarvis.protocol.client.OpenClawProtocolClient]) so
+     * it can parse OpenClawResponse / SkillManifest with strict validation
+     * instead of relying on the legacy [GatewayEvent.AssistantReply] path.
+     */
+    private val _rawFrames = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    val rawFrames: SharedFlow<String> = _rawFrames.asSharedFlow()
+
     private val httpClient = HttpClient(CIO) {
         install(WebSockets) {
             contentConverter = KotlinxWebsocketSerializationConverter(json)
@@ -173,6 +182,8 @@ class OpenClawClient @Inject constructor(
     }
 
     private fun handleIncoming(raw: String) {
+        // Surface every text frame to the typed protocol layer first.
+        _rawFrames.tryEmit(raw)
         val envelope = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return
         when (val type = envelope["type"]?.jsonPrimitive?.content) {
             "gateway.connected" -> {
