@@ -86,3 +86,31 @@ Each item is committed individually so partial work survives if a later step cra
 - Rebuilding any existing Jarvis subsystem
 - Direct GitHub OAuth (token-based only)
 - Multi-repo fan-out (single repo per device)
+
+## How to wire this into the existing Jarvis app
+
+1. Construct once at app startup:
+
+       val repo = GitHubIssueSettingsRepository(appContext)
+       val client = GitHubApiClient(repo)
+       val queue = IssueQueue(File(appContext.filesDir, "jarvis_github_issue_queue.json"))
+       val deduper = IssueDeduplicator(
+           PersistedDedupeStore(File(appContext.filesDir, "jarvis_github_dedupe.json"))
+       )
+       val redactor = Redactor(RedactionPolicy(repo.current().redaction))
+       val builder = IssueBodyBuilder(redactor, settings = { repo.current() })
+       val logger = GitHubIssueLogger(repo, deduper, builder, client, queue, openClawBridge)
+       IssueQueueWorker(queue, client, onIssueCreated = logger::onQueuedIssuePosted).start()
+
+2. From the existing state-machine emitter, voice pipeline, action
+   executor, intent router, and OpenClaw bridge, call the matching
+   integration hook (StateMachineHook / VoicePipelineHook /
+   ActionExecutorHook / RoutingHook / OpenClawHook). Each hook is a
+   thin adapter — none of them depend on Jarvis-specific types.
+
+3. From the post-TTS transcript handler, push transcripts through
+   `UserCorrectionDetector.maybeReport` and call
+   `rememberLastCommand` after each successful command execution.
+
+4. Drop `GitHubIssueLoggingScreen(viewModel)` into the existing
+   settings navigation graph.
