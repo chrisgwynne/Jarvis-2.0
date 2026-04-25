@@ -6,6 +6,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import ai.openclaw.jarvis.audio.AudioRouteManager
 import ai.openclaw.jarvis.debug.AssistantDebugState
 import ai.openclaw.jarvis.debug.AssistantEventLog
+import ai.openclaw.jarvis.githubissues.GitHubIssueLogger
+import ai.openclaw.jarvis.githubissues.integration.IssueContextBuilder
 import ai.openclaw.jarvis.network.OpenClawClient
 import ai.openclaw.jarvis.statemachine.AssistantStateMachine
 import ai.openclaw.jarvis.trust.TrustManager
@@ -21,6 +23,8 @@ class DebugViewModel @Inject constructor(
     private val audioRouter: AudioRouteManager,
     private val eventLog: AssistantEventLog,
     private val sessionManager: SpeechSessionManager,
+    val issueLogger: GitHubIssueLogger,
+    val issueContextBuilder: IssueContextBuilder,
 ) : ViewModel() {
 
     val debugState: StateFlow<AssistantDebugState> = combine(

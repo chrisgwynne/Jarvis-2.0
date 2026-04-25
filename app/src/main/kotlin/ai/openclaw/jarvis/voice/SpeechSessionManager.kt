@@ -56,6 +56,12 @@ class SpeechSessionManager @Inject constructor(
     private val pendingActionManager: PendingActionManager,
     private val capabilitySnapshot: CapabilitySnapshotBuilder,
     private val errorRecovery: ErrorRecoveryManager,
+    private val actionHook: ai.openclaw.jarvis.githubissues.integration.ActionExecutorHook,
+    private val openClawHook: ai.openclaw.jarvis.githubissues.integration.OpenClawHook,
+    private val voiceHook: ai.openclaw.jarvis.githubissues.integration.VoicePipelineHook,
+    private val routingHook: ai.openclaw.jarvis.githubissues.integration.RoutingHook,
+    private val correctionDetector: ai.openclaw.jarvis.githubissues.detect.UserCorrectionDetector,
+    private val issueContextBuilder: ai.openclaw.jarvis.githubissues.integration.IssueContextBuilder,
 ) {
     companion object {
         private const val TAG = "SpeechSessionManager"
@@ -90,12 +96,29 @@ class SpeechSessionManager @Inject constructor(
 
         scope.launch {
             client.events.filterIsInstance<GatewayEvent.AssistantReply>().collect { event ->
-                val reply = event.frame.spokenReply ?: event.frame.text ?: return@collect
+                val reply = event.frame.spokenReply ?: event.frame.text
+                if (reply.isNullOrBlank()) {
+                    openClawHook.onMalformedResponse(
+                        rawDigest = "type=${event.frame.type} eventId=${event.frame.eventId}",
+                        context = issueContextBuilder.build(),
+                    )
+                    return@collect
+                }
                 addTranscript("jarvis", reply, "OpenClaw")
                 stateMachine.transition(AssistantState.SPEAKING, "openclaw reply")
                 speakIfEnabled(reply)
                 stateMachine.transition(AssistantState.IDLE_LISTENING, "reply spoken")
                 event.frame.eventId?.let { logger.completePending(it, reply) }
+            }
+        }
+
+        // Surface gateway-level errors (timeouts, contract violations, etc.)
+        scope.launch {
+            client.events.filterIsInstance<GatewayEvent.Error>().collect { event ->
+                openClawHook.onContractViolation(
+                    detail = event.message,
+                    context = issueContextBuilder.build(),
+                )
             }
         }
 
@@ -171,6 +194,10 @@ class SpeechSessionManager @Inject constructor(
                     is SttEvent.Final   -> { finalText = event.text; _partialText.value = "" }
                     is SttEvent.Error   -> {
                         Log.w(TAG, "STT error ${event.code}: ${event.message}")
+                        voiceHook.onSttFailure(
+                            "${event.code}: ${event.message}",
+                            issueContextBuilder.build(),
+                        )
                         val strategy = errorRecovery.strategyFor(
                             errorRecovery.errorCodeFromSttCode(event.code ?: 0)
                         )
@@ -190,6 +217,9 @@ class SpeechSessionManager @Inject constructor(
         }
 
         if (interrupted || finalText.isBlank()) {
+            if (!interrupted) {
+                voiceHook.onEmptyTranscript("captured but empty", issueContextBuilder.build())
+            }
             stateMachine.transition(AssistantState.IDLE_LISTENING, "no input")
             audioRouter.releaseAudioFocus()
             return
@@ -371,6 +401,17 @@ class SpeechSessionManager @Inject constructor(
     // ─── Dispatch by intent type ──────────────────────────────────────────────
 
     private suspend fun dispatch(parsed: ParsedIntent, prefs: JarvisSettings) {
+        // Surface low-confidence route decisions to the issue logger.
+        routingHook.onRouteResolved(
+            route = parsed.toRouteDecision().chosen.name,
+            intent = parsed.type.name,
+            confidence = parsed.confidence.toDouble(),
+            context = issueContextBuilder.build(
+                route = parsed.toRouteDecision().chosen.name,
+                intent = parsed.type.name,
+                userCommand = parsed.rawText,
+            ),
+        )
         when (parsed.type) {
             IntentType.DEVICE_CONTROL,
             IntentType.APP_OPEN,
@@ -456,6 +497,7 @@ class SpeechSessionManager @Inject constructor(
             tts.speak(reply, prefs.ttsSpeed, prefs.ttsPitch)
         }
         logger.log(parsed.rawText, parsed.toRouteDecision(), outcome, prefs)
+        reportActionOutcome(parsed, outcome)
     }
 
     // ─── OpenClaw forwarding ──────────────────────────────────────────────────
@@ -483,6 +525,13 @@ class SpeechSessionManager @Inject constructor(
                 tts.speak(strategy.userMessage, prefs.ttsSpeed, prefs.ttsPitch)
             }
             logger.logOffline(parsed.rawText, parsed.toRouteDecision(), prefs)
+            openClawHook.onOfflineWhenRequired(
+                issueContextBuilder.build(
+                    route = parsed.toRouteDecision().chosen.name,
+                    intent = parsed.type.name,
+                    userCommand = parsed.rawText,
+                ),
+            )
             stateMachine.transition(AssistantState.IDLE_LISTENING, "offline")
         }
     }
@@ -502,6 +551,7 @@ class SpeechSessionManager @Inject constructor(
         }
         stateMachine.transition(AssistantState.IDLE_LISTENING, "confirmed done")
         logger.log(req.intent.rawText, req.intent.toRouteDecision(), outcome, prefs)
+        reportActionOutcome(req.intent, outcome)
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -541,6 +591,73 @@ class SpeechSessionManager @Inject constructor(
         _transcript.value = (_transcript.value + TranscriptEntry(
             speaker = speaker, text = text, route = route,
         )).takeLast(50)
+        if (speaker == "user") {
+            // User correction detection: if the user says "that's wrong" /
+            // "you misunderstood" / etc. shortly after a command, file a
+            // routing/user-correction issue with the previous command's
+            // route + result attached.
+            correctionDetector.maybeReport(
+                transcript = text,
+                context = issueContextBuilder.build(userCommand = text),
+            )
+        }
+    }
+
+    // ─── GitHub Issue Logging hooks ──────────────────────────────────────────
+
+    /**
+     * Map an [ActionOutcome] into the right [ActionExecutorHook] call.
+     * Soft errors (`NEEDS_CONFIRM`, `MISSING_*`, `OPENCLAW_ROUTE`,
+     * `REQUIRES_UI`) are not real failures and are skipped; hard failures
+     * become per-action issues.
+     */
+    private fun reportActionOutcome(parsed: ParsedIntent, outcome: ActionOutcome) {
+        // Remember the command for the user-correction detector.
+        correctionDetector.rememberLastCommand(
+            command = parsed.rawText,
+            route = parsed.toRouteDecision().chosen.name,
+            result = outcome.spokenReply,
+        )
+        if (outcome.success) return
+        when (outcome.error) {
+            null,
+            "NEEDS_CONFIRM",
+            "MISSING_CONTACT", "MISSING_MESSAGE", "MISSING_APP",
+            "OPENCLAW_ROUTE", "REQUIRES_UI" -> return
+        }
+        val ctx = issueContextBuilder.build(
+            route = parsed.toRouteDecision().chosen.name,
+            intent = parsed.type.name,
+            userCommand = parsed.rawText,
+            actualBehaviour = outcome.spokenReply,
+        )
+        val code = outcome.error
+        when (parsed.type) {
+            IntentType.COMMUNICATION_SEND ->
+                if (parsed.messageBody != null) {
+                    actionHook.onSmsFailure(code, outcome.spokenReply, ctx)
+                } else {
+                    actionHook.onWhatsAppFailure(code, outcome.spokenReply, ctx)
+                }
+            IntentType.COMMUNICATION_CALL ->
+                actionHook.onCallFailure(code, outcome.spokenReply, ctx)
+            IntentType.APP_OPEN ->
+                if (code == "WHATSAPP_NOT_INSTALLED" || code?.contains("not", ignoreCase = true) == true) {
+                    actionHook.onAppNotFound(parsed.appName ?: "(unknown)", ctx)
+                } else {
+                    actionHook.onSmsFailure(code, outcome.spokenReply, ctx)
+                }
+            IntentType.SCREEN_CAPTURE ->
+                actionHook.onScreenshotFailure(code, outcome.spokenReply, ctx)
+            IntentType.LOCATION_QUERY ->
+                actionHook.onLocationFailure(code, outcome.spokenReply, ctx)
+            else ->
+                if (code == "UNKNOWN_INTENT") {
+                    routingHook.onUnknownIntent(parsed.rawText, ctx)
+                } else {
+                    actionHook.onSmsFailure(code, outcome.spokenReply, ctx)
+                }
+        }
     }
 }
 

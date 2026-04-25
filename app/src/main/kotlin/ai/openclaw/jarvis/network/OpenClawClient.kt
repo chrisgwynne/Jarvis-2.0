@@ -210,6 +210,15 @@ class OpenClawClient @Inject constructor(
         wsSession?.send(Frame.Text(text))
     }
 
+    /**
+     * Emit an opaque JSON frame on the existing WebSocket session.
+     * Used by the GitHub Issue Logging bridge for `jarvis.github_issue_*`
+     * events that don't fit the strict [SessionEvent] schema. No-op when
+     * the gateway is offline — the issue itself is already on its own
+     * offline queue and will retry independently.
+     */
+    suspend fun sendCustomFrame(text: String) = sendRaw(text)
+
     private suspend inline fun <reified T> sendFrame(frame: T) {
         sendRaw(json.encodeToString(frame))
     }

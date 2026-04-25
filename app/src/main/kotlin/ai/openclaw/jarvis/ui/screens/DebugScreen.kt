@@ -19,6 +19,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.openclaw.jarvis.debug.AssistantEvent
 import ai.openclaw.jarvis.debug.AssistantDebugState
+import ai.openclaw.jarvis.githubissues.model.IssueEvent
+import ai.openclaw.jarvis.githubissues.ui.DebugIssueButton
 import ai.openclaw.jarvis.ui.theme.*
 import ai.openclaw.jarvis.ui.viewmodel.DebugViewModel
 import java.text.SimpleDateFormat
@@ -69,6 +71,30 @@ fun DebugScreen(
             state.lastError?.let { error ->
                 DebugErrorBanner(error)
             }
+            // "Create issue from this event" — file the most recent error
+            // (or current state) as a GitHub issue, bypassing severity /
+            // category gating.
+            DebugIssueButton(
+                logger = viewModel.issueLogger,
+                contextBuilder = viewModel.issueContextBuilder,
+                eventFactory = { ctx ->
+                    val errorMsg = state.lastError
+                    if (errorMsg != null) {
+                        IssueEvent.ErrorRecovery(
+                            fromState = state.assistantState.name,
+                            triggerReason = errorMsg,
+                            context = ctx.copy(actualBehaviour = errorMsg),
+                        )
+                    } else {
+                        IssueEvent.Unsupported(
+                            capability = "debug-snapshot",
+                            reason = "Manual debug-screen capture",
+                            userPhrase = state.lastTranscript.takeIf { it.isNotBlank() },
+                            context = ctx,
+                        )
+                    }
+                },
+            )
             Text(
                 "EVENT LOG",
                 color = CobaltBright, fontSize = 11.sp, letterSpacing = 2.sp,

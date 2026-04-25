@@ -3,11 +3,22 @@ package ai.openclaw.jarvis.statemachine
 import ai.openclaw.jarvis.debug.AssistantEvent
 import ai.openclaw.jarvis.debug.AssistantEventLog
 import android.util.Log
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/** Emitted for every successful transition. */
+data class StateTransition(
+    val from: AssistantState,
+    val to: AssistantState,
+    val reason: String?,
+)
 
 private const val TAG = "AssistantStateMachine"
 
@@ -26,6 +37,19 @@ class AssistantStateMachine @Inject constructor(
 ) {
     private val _state = MutableStateFlow(AssistantState.DISABLED)
     val state: StateFlow<AssistantState> = _state.asStateFlow()
+
+    private val _transitions = MutableSharedFlow<StateTransition>(
+        replay = 0,
+        extraBufferCapacity = 32,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /**
+     * Stream of every accepted transition (including interrupts). Subscribed
+     * by the GitHub Issue Logging hook so ERROR_RECOVERY transitions can be
+     * filed automatically without coupling the state machine to that module.
+     */
+    val transitions: SharedFlow<StateTransition> = _transitions.asSharedFlow()
 
     val currentState: AssistantState get() = _state.value
 
@@ -47,6 +71,7 @@ class AssistantStateMachine @Inject constructor(
         val msg = "$from → $to${if (reason.isNotBlank()) " [$reason]" else ""}"
         Log.d(TAG, msg)
         eventLog.log(AssistantEvent(stateFrom = from, stateTo = to, action = reason.ifBlank { null }))
+        _transitions.tryEmit(StateTransition(from, to, reason.ifBlank { null }))
         return true
     }
 
@@ -64,6 +89,7 @@ class AssistantStateMachine @Inject constructor(
             stateTo   = AssistantState.IDLE_LISTENING,
             action    = reason,
         ))
+        _transitions.tryEmit(StateTransition(from, AssistantState.IDLE_LISTENING, reason))
         return true
     }
 
