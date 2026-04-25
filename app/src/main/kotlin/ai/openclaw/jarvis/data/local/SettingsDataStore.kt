@@ -28,9 +28,13 @@ data class JarvisSettings(
     val ttsSpeed: Float = 1.0f,
     val ttsPitch: Float = 1.0f,
     val wakeWordEnabled: Boolean = false,
+    val wakePhrase: String = "hey jarvis",
+    val alwaysListeningEnabled: Boolean = false,
     val pushToTalkEnabled: Boolean = true,
+    // Audio routing
+    val bluetoothAudioEnabled: Boolean = true,
     // Behaviour
-    val trustedMode: Boolean = false,       // skip confirmation for SMS/calls
+    val trustedMode: Boolean = false,
     val confirmDestructive: Boolean = true,
     val sendLocationContext: Boolean = false,
     val sendScreenContext: Boolean = false,
@@ -52,9 +56,12 @@ class SettingsDataStore @Inject constructor(
         val TTS_ENABLED       = booleanPreferencesKey("tts_enabled")
         val TTS_SPEED         = stringPreferencesKey("tts_speed")
         val TTS_PITCH         = stringPreferencesKey("tts_pitch")
-        val WAKE_WORD_ENABLED = booleanPreferencesKey("wake_word_enabled")
-        val PTT_ENABLED       = booleanPreferencesKey("ptt_enabled")
-        val TRUSTED_MODE      = booleanPreferencesKey("trusted_mode")
+        val WAKE_WORD_ENABLED     = booleanPreferencesKey("wake_word_enabled")
+        val WAKE_PHRASE           = stringPreferencesKey("wake_phrase")
+        val ALWAYS_LISTENING      = booleanPreferencesKey("always_listening_enabled")
+        val PTT_ENABLED           = booleanPreferencesKey("ptt_enabled")
+        val BLUETOOTH_AUDIO       = booleanPreferencesKey("bluetooth_audio_enabled")
+        val TRUSTED_MODE          = booleanPreferencesKey("trusted_mode")
         val CONFIRM_DESTRUCTIVE = booleanPreferencesKey("confirm_destructive")
         val SEND_LOCATION     = booleanPreferencesKey("send_location_context")
         val SEND_SCREEN       = booleanPreferencesKey("send_screen_context")
@@ -71,9 +78,12 @@ class SettingsDataStore @Inject constructor(
             ttsEnabled         = prefs[Keys.TTS_ENABLED]         ?: true,
             ttsSpeed           = prefs[Keys.TTS_SPEED]?.toFloatOrNull()  ?: 1.0f,
             ttsPitch           = prefs[Keys.TTS_PITCH]?.toFloatOrNull()  ?: 1.0f,
-            wakeWordEnabled    = prefs[Keys.WAKE_WORD_ENABLED]   ?: false,
-            pushToTalkEnabled  = prefs[Keys.PTT_ENABLED]         ?: true,
-            trustedMode        = prefs[Keys.TRUSTED_MODE]        ?: false,
+            wakeWordEnabled        = prefs[Keys.WAKE_WORD_ENABLED]  ?: false,
+            wakePhrase             = prefs[Keys.WAKE_PHRASE]         ?: "hey jarvis",
+            alwaysListeningEnabled = prefs[Keys.ALWAYS_LISTENING]    ?: false,
+            pushToTalkEnabled      = prefs[Keys.PTT_ENABLED]         ?: true,
+            bluetoothAudioEnabled  = prefs[Keys.BLUETOOTH_AUDIO]     ?: true,
+            trustedMode            = prefs[Keys.TRUSTED_MODE]        ?: false,
             confirmDestructive = prefs[Keys.CONFIRM_DESTRUCTIVE] ?: true,
             sendLocationContext = prefs[Keys.SEND_LOCATION]      ?: false,
             sendScreenContext  = prefs[Keys.SEND_SCREEN]         ?: false,
@@ -89,8 +99,11 @@ class SettingsDataStore @Inject constructor(
     suspend fun updateTtsEnabled(v: Boolean)      = store.edit { it[Keys.TTS_ENABLED]       = v }
     suspend fun updateTtsSpeed(v: Float)          = store.edit { it[Keys.TTS_SPEED]         = v.toString() }
     suspend fun updateTtsPitch(v: Float)          = store.edit { it[Keys.TTS_PITCH]         = v.toString() }
-    suspend fun updateWakeWord(v: Boolean)        = store.edit { it[Keys.WAKE_WORD_ENABLED] = v }
-    suspend fun updatePtt(v: Boolean)             = store.edit { it[Keys.PTT_ENABLED]       = v }
+    suspend fun updateWakeWord(v: Boolean)          = store.edit { it[Keys.WAKE_WORD_ENABLED] = v }
+    suspend fun updateWakePhrase(v: String)         = store.edit { it[Keys.WAKE_PHRASE]        = v }
+    suspend fun updateAlwaysListening(v: Boolean)   = store.edit { it[Keys.ALWAYS_LISTENING]   = v }
+    suspend fun updatePtt(v: Boolean)               = store.edit { it[Keys.PTT_ENABLED]        = v }
+    suspend fun updateBluetoothAudio(v: Boolean)    = store.edit { it[Keys.BLUETOOTH_AUDIO]    = v }
     suspend fun updateTrustedMode(v: Boolean)     = store.edit { it[Keys.TRUSTED_MODE]      = v }
     suspend fun updateConfirmDestructive(v: Boolean) = store.edit { it[Keys.CONFIRM_DESTRUCTIVE] = v }
     suspend fun updateSendLocation(v: Boolean)    = store.edit { it[Keys.SEND_LOCATION]     = v }

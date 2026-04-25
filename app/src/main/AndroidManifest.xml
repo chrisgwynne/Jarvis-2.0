@@ -11,10 +11,18 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- ── Bluetooth (audio transport only) ── -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+
     <!-- ── Device / Torch ── -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.flash" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <!-- ── Location ── -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -45,6 +53,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
 
+    <!-- ── Always-on listening ── -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
     <!-- ── Vibrate ── -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
@@ -55,8 +66,11 @@
     <!-- ── Wake lock (foreground service) ── -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- ── Receive boot (re-connect gateway on reboot) ── -->
+    <!-- ── Receive boot (reconnect on reboot, restart always-listening) ── -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ── Battery optimization exemption request ── -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".JarvisApp"
@@ -79,11 +93,26 @@
             </intent-filter>
         </activity>
 
+        <!-- Always-on listening foreground service -->
+        <service
+            android:name=".voice.AlwaysListeningService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- ScreenCaptureForegroundService for screenshot capability -->
         <service
             android:name=".capabilities.impl.ScreenCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- Boot receiver: restart AlwaysListeningService after reboot if enabled -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

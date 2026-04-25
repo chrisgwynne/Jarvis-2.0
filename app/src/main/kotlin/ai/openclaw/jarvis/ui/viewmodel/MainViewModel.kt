@@ -9,6 +9,7 @@ import ai.openclaw.jarvis.data.models.RouteChoice
 import ai.openclaw.jarvis.network.GatewayEvent
 import ai.openclaw.jarvis.network.OpenClawClient
 import ai.openclaw.jarvis.session.SessionEventLogger
+import ai.openclaw.jarvis.voice.ConfirmationRequest
 import ai.openclaw.jarvis.voice.TranscriptEntry
 import ai.openclaw.jarvis.voice.VoiceFrontend
 import ai.openclaw.jarvis.voice.VoiceState
@@ -24,10 +25,11 @@ class MainViewModel @Inject constructor(
     private val sessionLogger: SessionEventLogger,
 ) : ViewModel() {
 
-    val voiceState: StateFlow<VoiceState>          = voiceFrontend.voiceState
-    val transcript: StateFlow<List<TranscriptEntry>> = voiceFrontend.transcript
-    val partialText: StateFlow<String>             = voiceFrontend.partialText
-    val gatewayState: StateFlow<GatewayState>      = gatewayClient.gatewayState
+    val voiceState: StateFlow<VoiceState>                     = voiceFrontend.voiceState
+    val transcript: StateFlow<List<TranscriptEntry>>          = voiceFrontend.transcript
+    val partialText: StateFlow<String>                        = voiceFrontend.partialText
+    val gatewayState: StateFlow<GatewayState>                 = gatewayClient.gatewayState
+    val pendingConfirmation: StateFlow<ConfirmationRequest?>  = voiceFrontend.pendingConfirmation
 
     val queueSize: StateFlow<Int> = offlineQueue.queueSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -73,4 +75,9 @@ class MainViewModel @Inject constructor(
 
     fun onPttPress() = voiceFrontend.startListening()
     fun onPttRelease() = voiceFrontend.stopListening()
+
+    // ─── Confirmation ─────────────────────────────────────────────────────────
+
+    fun confirmPending() = voiceFrontend.confirmPending()
+    fun dismissConfirmation() = voiceFrontend.dismissConfirmation()
 }

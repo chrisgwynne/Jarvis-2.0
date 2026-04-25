@@ -6,10 +6,6 @@ import ai.openclaw.jarvis.data.models.NodeCapabilityAd
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Central registry of all Android capabilities.
- * Used to advertise to the Gateway and to resolve capability by ID.
- */
 @Singleton
 class CapabilityRegistry @Inject constructor(
     val device: DeviceCapabilityImpl,
@@ -23,10 +19,11 @@ class CapabilityRegistry @Inject constructor(
     val apps: AppsCapabilityImpl,
     val media: MediaCapabilityImpl,
     val notification: NotificationCapabilityImpl,
+    val whatsApp: WhatsAppCapabilityImpl,
 ) {
     val all: List<Capability> = listOf(
         device, location, camera, screenshot,
-        contacts, calendar, sms, calls, apps, media, notification,
+        contacts, calendar, sms, calls, apps, media, notification, whatsApp,
     )
 
     fun toAdvertisements(): List<NodeCapabilityAd> = all.map { cap ->

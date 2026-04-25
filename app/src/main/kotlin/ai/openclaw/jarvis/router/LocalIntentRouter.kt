@@ -8,31 +8,32 @@ import javax.inject.Singleton
 /**
  * Decides where to route a user utterance.
  *
+ * Now delegates to IntentParser for rich entity extraction,
+ * while keeping the same RouteDecision-returning surface for backward compat.
+ *
  * Policy:
  *   ANDROID_LOCAL  → obvious phone reflexes (torch, volume, open app, timer…)
  *   OPENCLAW       → all natural conversation, business logic, memory, planning
  *   MIXED          → local capture + forward to OpenClaw (e.g. screenshot)
  *
- * When ambiguous, route to OPENCLAW. Never block an utterance locally
- * without high confidence.
+ * When ambiguous, default to OPENCLAW. Never block locally without high confidence.
  */
 @Singleton
 class LocalIntentRouter @Inject constructor(
-    private val classifier: IntentClassifier,
+    private val parser: IntentParser,
 ) {
-    fun route(text: String): RouteDecision {
-        val match = classifier.classify(text)
-        return RouteDecision(
-            chosen     = match.route,
-            intent     = match.intent,
-            confidence = match.confidence,
-        )
-    }
+    /** Parse and convert to legacy RouteDecision for backward compat. */
+    fun route(text: String): RouteDecision = parser.parse(text).toRouteDecision()
+
+    /** Return the rich ParsedIntent with entities. */
+    fun parse(text: String): ParsedIntent = parser.parse(text)
 
     fun shouldHandleLocally(text: String): Boolean {
-        val decision = route(text)
-        return decision.chosen == RouteChoice.ANDROID_LOCAL && decision.confidence >= 0.85f
+        val parsed = parser.parse(text)
+        return parsed.toRouteDecision().chosen == RouteChoice.ANDROID_LOCAL &&
+               parsed.confidence >= 0.85f
     }
 
-    fun isMixed(text: String): Boolean = route(text).chosen == RouteChoice.MIXED
+    fun isMixed(text: String): Boolean =
+        parser.parse(text).toRouteDecision().chosen == RouteChoice.MIXED
 }

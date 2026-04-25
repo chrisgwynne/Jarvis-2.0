@@ -29,13 +29,14 @@ fun MainScreen(
     onNavigateToSettings: () -> Unit,
     viewModel: MainViewModel = hiltViewModel(),
 ) {
-    val voiceState     by viewModel.voiceState.collectAsStateWithLifecycle()
-    val transcript     by viewModel.transcript.collectAsStateWithLifecycle()
-    val partialText    by viewModel.partialText.collectAsStateWithLifecycle()
-    val gatewayState   by viewModel.gatewayState.collectAsStateWithLifecycle()
-    val lastRoute      by viewModel.lastRoute.collectAsStateWithLifecycle()
-    val queueSize      by viewModel.queueSize.collectAsStateWithLifecycle()
-    val lastResult     by viewModel.lastResult.collectAsStateWithLifecycle()
+    val voiceState          by viewModel.voiceState.collectAsStateWithLifecycle()
+    val transcript          by viewModel.transcript.collectAsStateWithLifecycle()
+    val partialText         by viewModel.partialText.collectAsStateWithLifecycle()
+    val gatewayState        by viewModel.gatewayState.collectAsStateWithLifecycle()
+    val lastRoute           by viewModel.lastRoute.collectAsStateWithLifecycle()
+    val queueSize           by viewModel.queueSize.collectAsStateWithLifecycle()
+    val lastResult          by viewModel.lastResult.collectAsStateWithLifecycle()
+    val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = BlueprintBackground,
@@ -157,6 +158,17 @@ fun MainScreen(
             )
 
             Spacer(Modifier.height(16.dp))
+        }
+
+        // ── Confirmation dialog ───────────────────────────────────────────────
+        pendingConfirmation?.let { req ->
+            ConfirmationDialog(
+                title         = "Confirm Action",
+                message       = req.summary,
+                isDestructive = true,
+                onConfirm     = viewModel::confirmPending,
+                onDismiss     = viewModel::dismissConfirmation,
+            )
         }
     }
 }

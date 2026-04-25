@@ -7,6 +7,9 @@ import ai.openclaw.jarvis.capabilities.CapabilityRegistry
 import ai.openclaw.jarvis.data.local.JarvisSettings
 import ai.openclaw.jarvis.data.local.PairingStore
 import ai.openclaw.jarvis.data.local.SettingsDataStore
+import ai.openclaw.jarvis.voice.AlwaysListeningService
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -15,6 +18,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val store: SettingsDataStore,
     private val pairingStore: PairingStore,
     private val registry: CapabilityRegistry,
@@ -37,8 +41,14 @@ class SettingsViewModel @Inject constructor(
     fun updateTtsEnabled(v: Boolean)        = viewModelScope.launch { store.updateTtsEnabled(v) }
     fun updateTtsSpeed(v: Float)            = viewModelScope.launch { store.updateTtsSpeed(v) }
     fun updateTtsPitch(v: Float)            = viewModelScope.launch { store.updateTtsPitch(v) }
-    fun updateWakeWord(v: Boolean)          = viewModelScope.launch { store.updateWakeWord(v) }
+    fun updateWakeWord(v: Boolean)            = viewModelScope.launch { store.updateWakeWord(v) }
+    fun updateWakePhrase(v: String)           = viewModelScope.launch { store.updateWakePhrase(v) }
+    fun updateAlwaysListening(v: Boolean) {
+        viewModelScope.launch { store.updateAlwaysListening(v) }
+        if (v) AlwaysListeningService.start(context) else AlwaysListeningService.stop(context)
+    }
     fun updatePtt(v: Boolean)               = viewModelScope.launch { store.updatePtt(v) }
+    fun updateBluetoothAudio(v: Boolean)    = viewModelScope.launch { store.updateBluetoothAudio(v) }
     fun updateTrustedMode(v: Boolean)       = viewModelScope.launch { store.updateTrustedMode(v) }
     fun updateConfirmDestructive(v: Boolean)= viewModelScope.launch { store.updateConfirmDestructive(v) }
     fun updateSendLocation(v: Boolean)      = viewModelScope.launch { store.updateSendLocation(v) }

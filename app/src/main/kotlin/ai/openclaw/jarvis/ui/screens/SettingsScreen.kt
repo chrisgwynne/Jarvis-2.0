@@ -102,11 +102,18 @@ fun SettingsScreen(
                     onChange = viewModel::updatePtt,
                 )
                 SettingsToggle(
-                    label    = "Wake Word (coming soon)",
-                    value    = settings.wakeWordEnabled,
-                    onChange = viewModel::updateWakeWord,
-                    enabled  = false,
+                    label    = "Always Listening",
+                    value    = settings.alwaysListeningEnabled,
+                    onChange = viewModel::updateAlwaysListening,
                 )
+                if (settings.alwaysListeningEnabled) {
+                    SettingsTextField(
+                        label    = "Wake Phrase",
+                        value    = settings.wakePhrase,
+                        hint     = "hey jarvis",
+                        onChange = viewModel::updateWakePhrase,
+                    )
+                }
                 SettingsSlider(
                     label  = "TTS Speed",
                     value  = settings.ttsSpeed,
@@ -122,6 +129,15 @@ fun SettingsScreen(
                     steps  = 14,
                     format = { "%.1f×".format(it) },
                     onChange = viewModel::updateTtsPitch,
+                )
+            }
+
+            // ── Audio ──────────────────────────────────────────────────────────
+            SettingsSection(title = "AUDIO") {
+                SettingsToggle(
+                    label    = "Bluetooth Audio",
+                    value    = settings.bluetoothAudioEnabled,
+                    onChange = viewModel::updateBluetoothAudio,
                 )
             }
 
