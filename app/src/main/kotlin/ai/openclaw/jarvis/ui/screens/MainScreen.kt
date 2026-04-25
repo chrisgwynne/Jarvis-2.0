@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +29,7 @@ import ai.openclaw.jarvis.voice.VoiceState
 @Composable
 fun MainScreen(
     onNavigateToSettings: () -> Unit,
+    onNavigateToDebug: () -> Unit = {},
     viewModel: MainViewModel = hiltViewModel(),
 ) {
     val voiceState          by viewModel.voiceState.collectAsStateWithLifecycle()
@@ -39,6 +41,7 @@ fun MainScreen(
     val lastResult          by viewModel.lastResult.collectAsStateWithLifecycle()
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
     val sessionTrust        by viewModel.sessionTrust.collectAsStateWithLifecycle()
+    val debugEnabled        by viewModel.debugLogsEnabled.collectAsStateWithLifecycle()
 
     Scaffold(
         containerColor = BlueprintBackground,
@@ -53,6 +56,11 @@ fun MainScreen(
                     )
                 },
                 actions = {
+                    if (debugEnabled) {
+                        IconButton(onClick = onNavigateToDebug) {
+                            Icon(Icons.Default.BugReport, "Debug", tint = CobaltBright)
+                        }
+                    }
                     IconButton(onClick = onNavigateToSettings) {
                         Icon(
                             imageVector        = Icons.Default.Settings,

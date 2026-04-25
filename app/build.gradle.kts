@@ -107,4 +107,8 @@ dependencies {
 
     // Security (EncryptedSharedPreferences for pairing token)
     implementation(libs.security.crypto)
+
+    // Unit tests
+    testImplementation(libs.junit4)
+    testImplementation(libs.coroutines.test)
 }

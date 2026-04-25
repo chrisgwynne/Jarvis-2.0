@@ -3,7 +3,9 @@ package ai.openclaw.jarvis.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import ai.openclaw.jarvis.data.local.JarvisSettings
 import ai.openclaw.jarvis.data.local.OfflineQueueStore
+import ai.openclaw.jarvis.data.local.SettingsDataStore
 import ai.openclaw.jarvis.data.models.GatewayState
 import ai.openclaw.jarvis.data.models.RouteChoice
 import ai.openclaw.jarvis.network.GatewayEvent
@@ -24,6 +26,7 @@ class MainViewModel @Inject constructor(
     private val gatewayClient: OpenClawClient,
     private val offlineQueue: OfflineQueueStore,
     private val sessionLogger: SessionEventLogger,
+    private val settingsStore: SettingsDataStore,
 ) : ViewModel() {
 
     val voiceState: StateFlow<VoiceState>                     = voiceFrontend.voiceState
@@ -35,6 +38,10 @@ class MainViewModel @Inject constructor(
 
     val queueSize: StateFlow<Int> = offlineQueue.queueSize
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    val debugLogsEnabled: StateFlow<Boolean> = settingsStore.settings
+        .map { it.debugLogsEnabled }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private val _lastRoute  = MutableStateFlow<RouteChoice?>(null)
     val lastRoute: StateFlow<RouteChoice?> = _lastRoute.asStateFlow()
