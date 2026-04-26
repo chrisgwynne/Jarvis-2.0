@@ -70,6 +70,8 @@ class SpeechSessionManager @Inject constructor(
     private val deviceContextBuilder: ai.openclaw.jarvis.protocol.DeviceContextBuilder,
     private val awarenessManager: ai.openclaw.jarvis.awareness.CapabilityAwarenessManager,
     private val awarenessResponder: ai.openclaw.jarvis.awareness.AwarenessResponder,
+    private val contextCollector: ai.openclaw.jarvis.proactive.ContextCollector,
+    private val suggestionManager: ai.openclaw.jarvis.proactive.SuggestionManager,
 ) {
     companion object {
         private const val TAG = "SpeechSessionManager"
@@ -141,6 +143,24 @@ class SpeechSessionManager @Inject constructor(
 
         // Wire the typed-protocol response / malformed / skill manifest handlers.
         registerTypedProtocolHandlers()
+
+        // Speak proactive VOICE-format suggestions when they land,
+        // unless the assistant is already speaking / awaiting confirmation.
+        scope.launch {
+            suggestionManager.voice.collect { suggestion ->
+                val prefs = settings.settings.first()
+                if (interrupted || !prefs.ttsEnabled) return@collect
+                if (stateMachine.currentState in setOf(
+                        AssistantState.SPEAKING,
+                        AssistantState.AWAITING_CONFIRMATION,
+                        AssistantState.CAPTURING_COMMAND,
+                    )
+                ) return@collect
+                addTranscript("jarvis", suggestion.voicePrompt, "Proactive")
+                audioRouter.prepareForPlayback()
+                tts.speak(suggestion.voicePrompt, prefs.ttsSpeed, prefs.ttsPitch)
+            }
+        }
     }
 
     // ─── Session control ──────────────────────────────────────────────────────
@@ -627,6 +647,9 @@ class SpeechSessionManager @Inject constructor(
             speaker = speaker, text = text, route = route,
         )).takeLast(50)
         if (speaker == "user") {
+            // Feed the proactive context collector so signal/suggestion
+            // generation can spot patterns in recent commands.
+            contextCollector.recordCommand(text)
             // User correction detection: if the user says "that's wrong" /
             // "you misunderstood" / etc. shortly after a command, file a
             // routing/user-correction issue with the previous command's
@@ -647,6 +670,12 @@ class SpeechSessionManager @Inject constructor(
      * become per-action issues.
      */
     private fun reportActionOutcome(parsed: ParsedIntent, outcome: ActionOutcome) {
+        // Feed the proactive context collector so frequent-app /
+        // repeated-command signals can fire.
+        contextCollector.recordAction(parsed.type.name)
+        if (parsed.type == IntentType.SCREEN_CAPTURE) {
+            contextCollector.recordScreenshot()
+        }
         // Remember the command for the user-correction detector.
         correctionDetector.rememberLastCommand(
             command = parsed.rawText,

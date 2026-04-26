@@ -6,6 +6,7 @@ import ai.openclaw.jarvis.capabilities.CapabilityRegistry
 import ai.openclaw.jarvis.githubissues.integration.IssueLoggingWiring
 import ai.openclaw.jarvis.githubissues.queue.IssueQueueWorker
 import ai.openclaw.jarvis.network.OpenClawClient
+import ai.openclaw.jarvis.proactive.SuggestionManager
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -15,6 +16,7 @@ class JarvisApp : Application() {
     @Inject lateinit var capabilityRegistry: CapabilityRegistry
     @Inject lateinit var issueQueueWorker: IssueQueueWorker
     @Inject lateinit var issueLoggingWiring: IssueLoggingWiring
+    @Inject lateinit var suggestionManager: SuggestionManager
 
     override fun onCreate() {
         super.onCreate()
@@ -26,5 +28,9 @@ class JarvisApp : Application() {
         // and start draining any issues queued while offline.
         issueLoggingWiring.start()
         issueQueueWorker.start()
+
+        // Proactive context awareness: starts the snapshot loop and
+        // lets the suggestion manager subscribe to it.
+        suggestionManager.start()
     }
 }
