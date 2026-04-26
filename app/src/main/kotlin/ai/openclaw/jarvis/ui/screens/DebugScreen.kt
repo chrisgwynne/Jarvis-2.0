@@ -32,6 +32,7 @@ private val TIME_FMT = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 @Composable
 fun DebugScreen(
     onBack: () -> Unit,
+    onNavigateToProtocol: () -> Unit = {},
     viewModel: DebugViewModel = hiltViewModel(),
 ) {
     val state by viewModel.debugState.collectAsStateWithLifecycle()
@@ -70,6 +71,18 @@ fun DebugScreen(
             DebugStatusGrid(state)
             state.lastError?.let { error ->
                 DebugErrorBanner(error)
+            }
+            OutlinedButton(
+                onClick = onNavigateToProtocol,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = CobaltGlow),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CobaltGlow.copy(alpha = 0.5f)),
+            ) {
+                Text(
+                    "PROTOCOL INSPECTOR",
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    letterSpacing = 1.sp,
+                )
             }
             // "Create issue from this event" — file the most recent error
             // (or current state) as a GitHub issue, bypassing severity /

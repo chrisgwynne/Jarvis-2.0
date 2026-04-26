@@ -7,12 +7,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import ai.openclaw.jarvis.ui.screens.DebugScreen
 import ai.openclaw.jarvis.ui.screens.MainScreen
+import ai.openclaw.jarvis.ui.screens.ProtocolDebugScreen
 import ai.openclaw.jarvis.ui.screens.SettingsScreen
 
 object Routes {
     const val MAIN     = "main"
     const val SETTINGS = "settings"
     const val DEBUG    = "debug"
+    const val PROTOCOL = "protocol"
 }
 
 @Composable
@@ -36,6 +38,12 @@ fun JarvisNavGraph(
         }
         composable(Routes.DEBUG) {
             DebugScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToProtocol = { navController.navigate(Routes.PROTOCOL) },
+            )
+        }
+        composable(Routes.PROTOCOL) {
+            ProtocolDebugScreen(
                 onBack = { navController.popBackStack() },
             )
         }
