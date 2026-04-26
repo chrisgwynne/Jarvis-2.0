@@ -86,8 +86,14 @@ class SpeakerIdentityManager @Inject constructor(
             if (sim > bestSim) { bestSim = sim; bestId = id }
         }
         val confidence = VoiceEmbeddingEngine.cosineToConfidence(bestSim)
-        return if (confidence >= IdentityResult.CONFIDENT_THRESHOLD && bestId != "unknown") {
-            IdentityResult(bestId, confidence, profiles[bestId]!!.trustLevel)
+        // Resolve the matched profile defensively — `bestId` only differs
+        // from "unknown" when at least one profile produced a similarity,
+        // but profile maps can be mutated between iteration and lookup
+        // when an enrolment lands concurrently. Fall through to UNKNOWN
+        // rather than NPE.
+        val matched = profiles[bestId]
+        return if (confidence >= IdentityResult.CONFIDENT_THRESHOLD && matched != null) {
+            IdentityResult(bestId, confidence, matched.trustLevel)
         } else {
             IdentityResult.UNKNOWN.copy(confidence = confidence)
         }

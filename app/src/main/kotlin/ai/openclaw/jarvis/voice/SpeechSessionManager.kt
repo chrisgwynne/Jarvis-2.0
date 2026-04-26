@@ -253,9 +253,9 @@ class SpeechSessionManager @Inject constructor(
                         predictiveResolver.reset()
                     }
                     is SttEvent.Error   -> {
-                        Log.w(TAG, "STT error ${event.code}: ${event.message}")
+                        Log.w(TAG, "STT error ${event.code}: ${ai.openclaw.jarvis.util.LogRedaction.redactedMessage(event.message)}")
                         voiceHook.onSttFailure(
-                            "${event.code}: ${event.message}",
+                            "${event.code}: ${ai.openclaw.jarvis.util.LogRedaction.redactedMessage(event.message)}",
                             issueContextBuilder.build(),
                         )
                         val strategy = errorRecovery.strategyFor(

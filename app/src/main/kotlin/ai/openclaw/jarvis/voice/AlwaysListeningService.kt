@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
 import ai.openclaw.jarvis.MainActivity
 import ai.openclaw.jarvis.data.local.SettingsDataStore
+import ai.openclaw.jarvis.util.LogRedaction
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import java.util.Locale
@@ -145,7 +146,9 @@ class AlwaysListeningService : Service() {
                 isListeningForWake = false
                 val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                 val text = matches?.firstOrNull() ?: ""
-                Log.d(TAG, "Wake check: '$text'")
+                // Never log the raw STT text — it can contain anything
+                // the user said before the wake-word match.
+                Log.d(TAG, "Wake check: ${LogRedaction.redactedText(text)}")
 
                 if (wakeController.checkResult(text)) {
                     // Wake word detected → start full session

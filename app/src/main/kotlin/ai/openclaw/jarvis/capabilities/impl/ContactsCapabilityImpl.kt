@@ -32,25 +32,43 @@ class ContactsCapabilityImpl @Inject constructor(
         if (!isAvailable()) {
             return capabilityFailure("PERMISSION_DENIED", "Contacts permission not granted", true)
         }
+        if (query.isBlank()) {
+            return capabilitySuccess(emptyList())
+        }
         return try {
             val results = mutableListOf<Contact>()
+            // Append `?limit=N` to the URI so the contacts provider caps
+            // its own result-set walk regardless of how broad the LIKE is.
             val uri = ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+                .buildUpon().appendQueryParameter("limit", MAX_RESULTS.toString()).build()
             val projection = arrayOf(
                 ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
                 ContactsContract.CommonDataKinds.Phone.NUMBER,
             )
             val selection = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?"
             val selectionArgs = arrayOf("%$query%")
-            context.contentResolver.query(uri, projection, selection, selectionArgs, null)?.use { cursor ->
+            val sortOrder = "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} ASC"
+            context.contentResolver.query(uri, projection, selection, selectionArgs, sortOrder)?.use { cursor ->
                 val nameIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
                 val phoneIdx = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                if (nameIdx < 0 || phoneIdx < 0) return@use
                 while (cursor.moveToNext()) {
-                    results.add(Contact(cursor.getString(nameIdx), cursor.getString(phoneIdx)))
+                    val name = cursor.getString(nameIdx)?.takeIf { it.isNotBlank() }
+                        ?: continue
+                    val phone = cursor.getString(phoneIdx)?.takeIf { it.isNotBlank() }
+                    results.add(Contact(name, phone))
                 }
             }
             capabilitySuccess(results)
+        } catch (e: SecurityException) {
+            // Permission revoked between isAvailable() and the query.
+            capabilityFailure("PERMISSION_DENIED", "Contacts permission revoked", true)
         } catch (e: Exception) {
             capabilityFailure("CONTACTS_ERROR", e.message ?: "Failed to query contacts")
         }
+    }
+
+    companion object {
+        private const val MAX_RESULTS = 25
     }
 }
