@@ -68,6 +68,8 @@ class SpeechSessionManager @Inject constructor(
     private val pendingTyped: ai.openclaw.jarvis.protocol.executor.ContractPendingActions,
     private val protocolValidator: ai.openclaw.jarvis.protocol.validation.ProtocolValidator,
     private val deviceContextBuilder: ai.openclaw.jarvis.protocol.DeviceContextBuilder,
+    private val awarenessManager: ai.openclaw.jarvis.awareness.CapabilityAwarenessManager,
+    private val awarenessResponder: ai.openclaw.jarvis.awareness.AwarenessResponder,
 ) {
     companion object {
         private const val TAG = "SpeechSessionManager"
@@ -278,6 +280,14 @@ class SpeechSessionManager @Inject constructor(
                 }
                 else -> { /* NoPending / Unrecognised — fall through to normal parse */ }
             }
+        }
+
+        // 3b. Awareness questions ("What can you do?", "Can you X?", etc.)
+        //     are always answered locally from the live snapshot, even
+        //     when OpenClaw is online — they're about Jarvis itself.
+        if (handleAwarenessQuestionIfAny(finalText)) {
+            audioRouter.releaseAudioFocus()
+            return
         }
 
         // 4. Parse intent
@@ -683,6 +693,51 @@ class SpeechSessionManager @Inject constructor(
                     actionHook.onSmsFailure(code, outcome.spokenReply, ctx)
                 }
         }
+    }
+
+    // ─── Awareness questions ─────────────────────────────────────────────────
+
+    /**
+     * If [transcript] is one of the recognised awareness questions
+     * ("What can you do?", "Can you X?", "What permissions are missing?",
+     * "Why can't you do that?"), answer it locally from
+     * [awarenessManager.snapshot] and emit a `jarvis.awareness_answer`
+     * session event so OpenClaw can see what we said. Returns true when
+     * the utterance was handled.
+     */
+    private suspend fun handleAwarenessQuestionIfAny(transcript: String): Boolean {
+        val q = ai.openclaw.jarvis.awareness.AwarenessQuestionDetector.detect(transcript)
+            ?: return false
+        val snapshot = awarenessManager.snapshot()
+        val answer = awarenessResponder.answer(q, snapshot)
+        addTranscript("user", transcript, "Awareness")
+        addTranscript("jarvis", answer, "Awareness")
+        val prefs = settings.settings.first()
+        if (!interrupted && prefs.ttsEnabled) {
+            stateMachine.transition(AssistantState.SPEAKING, "awareness")
+            audioRouter.prepareForPlayback()
+            tts.speak(answer, prefs.ttsSpeed, prefs.ttsPitch)
+        }
+        // Log the Q + A to OpenClaw via a session event so the backend
+        // can observe what Jarvis is telling the user about itself.
+        runCatching {
+            protocolClient.sendSessionEvent(
+                ai.openclaw.jarvis.protocol.model.JarvisSessionEvent(
+                    requestId = java.util.UUID.randomUUID().toString(),
+                    sessionKey = prefs.sessionKey,
+                    timestamp = ai.openclaw.jarvis.protocol.util.IsoTimestamp.now(),
+                    name = "jarvis.awareness_answer",
+                    body = kotlinx.serialization.json.buildJsonObject {
+                        put("question", kotlinx.serialization.json.JsonPrimitive(transcript))
+                        put("answer", kotlinx.serialization.json.JsonPrimitive(answer))
+                        put("trustLevel", kotlinx.serialization.json.JsonPrimitive(snapshot.trustLevel))
+                        put("openClawConnected", kotlinx.serialization.json.JsonPrimitive(snapshot.openClawConnected))
+                    },
+                )
+            )
+        }
+        stateMachine.transition(AssistantState.IDLE_LISTENING, "awareness done")
+        return true
     }
 
     // ─── Typed protocol path ─────────────────────────────────────────────────

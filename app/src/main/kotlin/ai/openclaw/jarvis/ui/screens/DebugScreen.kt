@@ -33,6 +33,7 @@ private val TIME_FMT = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
 fun DebugScreen(
     onBack: () -> Unit,
     onNavigateToProtocol: () -> Unit = {},
+    onNavigateToCapabilities: () -> Unit = {},
     viewModel: DebugViewModel = hiltViewModel(),
 ) {
     val state by viewModel.debugState.collectAsStateWithLifecycle()
@@ -80,6 +81,18 @@ fun DebugScreen(
             ) {
                 Text(
                     "PROTOCOL INSPECTOR",
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    letterSpacing = 1.sp,
+                )
+            }
+            OutlinedButton(
+                onClick = onNavigateToCapabilities,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = CobaltGlow),
+                border = androidx.compose.foundation.BorderStroke(1.dp, CobaltGlow.copy(alpha = 0.5f)),
+            ) {
+                Text(
+                    "CAPABILITY DASHBOARD",
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
                     letterSpacing = 1.sp,
                 )
