@@ -2,33 +2,45 @@ package ai.openclaw.jarvis.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ─── Blueprint cobalt palette ─────────────────────────────────────────────────
+// ─── Final Jarvis Mobile palette (per UI spec) ───────────────────────────────
+//
+// Backgrounds / surfaces
+val BlueprintBackground   = Color(0xFF0A0F16)   // App background
+val BlueprintSurface      = Color(0xFF111821)   // Surface
+val BlueprintCard         = Color(0xFF18212C)   // Elevated surface / card
+val BlueprintBorder       = Color(0xFF1E2A38)   // Card border
+val GridLineColor         = Color(0xFF142030)   // faint blueprint grid
 
-val BlueprintBackground   = Color(0xFF020D1A)   // near-black deep navy
-val BlueprintSurface      = Color(0xFF061828)   // dark navy surface
-val BlueprintCard         = Color(0xFF0A2035)   // slightly lighter card
-val BlueprintBorder       = Color(0xFF0D3A5C)   // cobalt border
+// Primary cobalt
+val CobaltPrimary         = Color(0xFF00A7FF)   // Cobalt blue (info / primary)
+val CobaltBright          = Color(0xFF139DFF)   // Bright blue glow
+val CobaltDeep            = Color(0xFF005DFF)   // Deep blue (pressed / depth)
+val CobaltGlow            = Color(0xFF00A7FF)   // glow / orb pulse (alias of primary)
 
-val CobaltPrimary         = Color(0xFF1B6FC8)   // main cobalt blue
-val CobaltBright          = Color(0xFF2E9BF5)   // bright cobalt highlight
-val CobaltGlow            = Color(0xFF4DB8FF)   // glow / orb pulse
+// Orb mood map
+val OrbIdle               = Color(0xFF005DFF)   // calm cobalt
+val OrbListening          = Color(0xFF139DFF)   // bright listening
+val OrbProcessing         = Color(0xFF005DFF)   // processing
+val OrbSpeaking           = Color(0xFF00A7FF)   // speaking
+val OrbError              = Color(0xFFFF4D4F)   // red pulse
+val OrbOffline            = Color(0xFFFFB020)   // amber dim
 
-val OrbIdle               = Color(0xFF1B6FC8)   // calm cobalt
-val OrbListening          = Color(0xFF2E9BF5)   // bright listening
-val OrbProcessing         = Color(0xFF0D5FA0)   // processing dim
-val OrbSpeaking           = Color(0xFF00BFFF)   // speaking cyan
+// Status palette
+val StatusConnected       = Color(0xFF14E1A0)   // success green
+val StatusWarning         = Color(0xFFFFB020)   // amber
+val StatusOffline         = Color(0xFFFF4D4F)   // danger red
+val StatusInfo            = Color(0xFF00A7FF)   // info blue
 
-val StatusConnected       = Color(0xFF00E676)   // green
-val StatusPairing         = Color(0xFFFFB300)   // amber
-val StatusOffline         = Color(0xFFEF5350)   // red
-val StatusQueued          = Color(0xFFFFB300)   // amber
+// Aliases used by older screens
+val StatusPairing         = StatusWarning
+val StatusQueued          = StatusWarning
 
-val RouteAndroid          = Color(0xFF00E676)   // green
-val RouteOpenClaw         = Color(0xFF2E9BF5)   // cobalt
+// Route palette (debug only — user-facing text uses words, not colors)
+val RouteAndroid          = StatusConnected
+val RouteOpenClaw         = CobaltPrimary
 val RouteMixed            = Color(0xFFB39DDB)   // soft purple
 
-val TextPrimary           = Color(0xFFE8F4FD)   // near-white with blue tint
-val TextSecondary         = Color(0xFF8BB8D4)   // muted cobalt-grey
-val TextDim               = Color(0xFF3D6B8A)   // very muted
-
-val GridLineColor         = Color(0xFF0A2A42)   // faint blueprint grid
+// Text
+val TextPrimary           = Color(0xFFE6F1FF)   // near-white with blue tint
+val TextSecondary         = Color(0xFF8AA2B8)   // muted cobalt-grey
+val TextDim               = Color(0xFF5E7185)   // very muted
