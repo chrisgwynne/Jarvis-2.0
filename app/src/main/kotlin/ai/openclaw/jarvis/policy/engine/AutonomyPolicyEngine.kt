@@ -105,13 +105,20 @@ class AutonomyPolicyEngine @Inject constructor(
             level = AutonomyLevel.EXECUTE_TRUSTED
         }
         // OpenClaw can ONLY downgrade — never escalate past what the user's
-        // settings allow.
+        // settings allow, and never below the user-mandated outbound floor.
         input.openClawSuggestedLevel?.let { suggested ->
-            if (suggested.rank < level.rank) {
-                reasons += "OpenClaw suggested $suggested (downgrade)"
-                level = suggested
-            } else if (suggested.rank > level.rank) {
-                reasons += "OpenClaw suggested $suggested but local policy held"
+            val outboundFloorBlocks =
+                settings.requireConfirmAllOutbound && descriptor.isOutbound() &&
+                    suggested.rank < AutonomyLevel.EXECUTE_WITH_CONFIRMATION.rank
+            when {
+                outboundFloorBlocks ->
+                    reasons += "OpenClaw suggested $suggested but confirm-all-outbound floor held"
+                suggested.rank < level.rank -> {
+                    reasons += "OpenClaw suggested $suggested (downgrade)"
+                    level = suggested
+                }
+                suggested.rank > level.rank ->
+                    reasons += "OpenClaw suggested $suggested but local policy held"
             }
         }
 
