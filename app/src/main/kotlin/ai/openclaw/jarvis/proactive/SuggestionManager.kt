@@ -86,6 +86,40 @@ class SuggestionManager @Inject constructor(
         signals.forEach { sig -> handleSignal(sig, snapshot) }
     }
 
+    /**
+     * Public entry for callers (e.g. the screen-awareness layer) that
+     * already have a fully-built [Suggestion] and just want it pushed
+     * through the same gating chain — master enable, unknown-speaker,
+     * quiet hours, per-signal toggle, suppressed set, cooldown,
+     * safety-format enforcement.
+     */
+    fun ingestExternalSuggestion(signal: Signal, ctx: ContextSnapshot, suggestion: Suggestion) {
+        val s = settingsRepo.current()
+        if (!s.enabled) return
+        if (ctx.speakerTrustLevel == "UNKNOWN") {
+            logger.logSuggestionSkipped(signal, "unknown_speaker")
+            return
+        }
+        if (s.quietHours.isQuiet(ctx.hourOfDay)) {
+            logger.logSuggestionSkipped(signal, "quiet_hours")
+            return
+        }
+        if (s.perSignal[signal.type] == false) {
+            logger.logSuggestionSkipped(signal, "per_signal_disabled")
+            return
+        }
+        if (suggestion.id in s.suppressedSuggestionIds) {
+            logger.logSuggestionSkipped(signal, "user_suppressed:${suggestion.id}")
+            return
+        }
+        if (!cooldowns.allow(signal.type, s.aggressiveness)) {
+            logger.logSuggestionSkipped(signal, "cooldown")
+            return
+        }
+        cooldowns.recordShown(signal.type)
+        deliver(enforceSafetyFormat(suggestion), signal)
+    }
+
     private fun handleSignal(signal: Signal, ctx: ContextSnapshot) {
         val s = settingsRepo.current()
         if (!s.enabled) return

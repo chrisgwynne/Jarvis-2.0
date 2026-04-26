@@ -18,6 +18,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.openclaw.jarvis.githubissues.ui.GitHubIssueLoggingSection
 import ai.openclaw.jarvis.proactive.ui.ProactiveSettingsSection
+import ai.openclaw.jarvis.screen.ui.ScreenAwarenessSettingsSection
 import ai.openclaw.jarvis.trust.TrustLevel
 import ai.openclaw.jarvis.ui.theme.*
 import ai.openclaw.jarvis.ui.viewmodel.SettingsViewModel
@@ -257,6 +258,9 @@ fun SettingsScreen(
 
             // ── Proactive Suggestions ─────────────────────────────────────────
             ProactiveSettingsSection()
+
+            // ── Screen Awareness ──────────────────────────────────────────────
+            ScreenAwarenessSettingsSection()
 
             // ── GitHub Issue Logging ──────────────────────────────────────────
             GitHubIssueLoggingSection()
