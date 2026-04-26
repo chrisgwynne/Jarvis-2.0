@@ -6,6 +6,7 @@ import ai.openclaw.jarvis.capabilities.CapabilityRegistry
 import ai.openclaw.jarvis.githubissues.integration.IssueLoggingWiring
 import ai.openclaw.jarvis.githubissues.queue.IssueQueueWorker
 import ai.openclaw.jarvis.network.OpenClawClient
+import ai.openclaw.jarvis.proactive.ContextCollector
 import ai.openclaw.jarvis.proactive.SuggestionManager
 import javax.inject.Inject
 
@@ -17,6 +18,7 @@ class JarvisApp : Application() {
     @Inject lateinit var issueQueueWorker: IssueQueueWorker
     @Inject lateinit var issueLoggingWiring: IssueLoggingWiring
     @Inject lateinit var suggestionManager: SuggestionManager
+    @Inject lateinit var contextCollector: ContextCollector
 
     override fun onCreate() {
         super.onCreate()
@@ -31,6 +33,6 @@ class JarvisApp : Application() {
 
         // Proactive context awareness: starts the snapshot loop and
         // lets the suggestion manager subscribe to it.
-        suggestionManager.start()
+        suggestionManager.start(contextCollector)
     }
 }

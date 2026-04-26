@@ -9,7 +9,7 @@ import ai.openclaw.jarvis.proactive.model.Signal
 import ai.openclaw.jarvis.proactive.model.Suggestion
 import ai.openclaw.jarvis.proactive.model.SuggestionFormat
 import ai.openclaw.jarvis.proactive.store.CooldownTracker
-import ai.openclaw.jarvis.proactive.store.ProactiveSettingsRepository
+import ai.openclaw.jarvis.proactive.store.ProactiveSettingsSource
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -47,11 +47,10 @@ import kotlinx.coroutines.launch
  */
 @Singleton
 class SuggestionManager @Inject constructor(
-    private val collector: ContextCollector,
     private val signalEngine: SignalEngine,
     private val proactiveEngine: ProactiveEngine,
     private val cooldowns: CooldownTracker,
-    private val settingsRepo: ProactiveSettingsRepository,
+    private val settingsRepo: ProactiveSettingsSource,
     private val logger: ProactiveLogger,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -70,8 +69,8 @@ class SuggestionManager @Inject constructor(
 
     @Volatile private var lastSnapshot: ContextSnapshot? = null
 
-    /** Idempotent. Starts the snapshot subscription. */
-    fun start() {
+    /** Idempotent. Starts the snapshot subscription against the supplied collector. */
+    fun start(collector: ContextCollector) {
         if (running) return
         running = true
         collector.start()

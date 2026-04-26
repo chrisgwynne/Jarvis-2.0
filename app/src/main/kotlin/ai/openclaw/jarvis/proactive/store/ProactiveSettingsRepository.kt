@@ -25,14 +25,14 @@ import kotlinx.coroutines.flow.asStateFlow
 @Singleton
 class ProactiveSettingsRepository @Inject constructor(
     @ApplicationContext context: Context,
-) {
+) : ProactiveSettingsSource {
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
     private val _settings = MutableStateFlow(load())
     val settings: StateFlow<ProactiveSettings> = _settings.asStateFlow()
 
-    fun current(): ProactiveSettings = _settings.value
+    override fun current(): ProactiveSettings = _settings.value
 
     fun update(transform: (ProactiveSettings) -> ProactiveSettings) {
         val next = transform(_settings.value)
@@ -40,7 +40,7 @@ class ProactiveSettingsRepository @Inject constructor(
         _settings.value = next
     }
 
-    fun suppress(suggestionId: String) = update {
+    override fun suppress(suggestionId: String) = update {
         it.copy(suppressedSuggestionIds = it.suppressedSuggestionIds + suggestionId)
     }
 

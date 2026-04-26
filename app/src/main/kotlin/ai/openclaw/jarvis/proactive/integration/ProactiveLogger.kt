@@ -20,18 +20,30 @@ import kotlinx.serialization.json.buildJsonObject
  * Sends `jarvis.proactive_*` JarvisSessionEvents to OpenClaw so the
  * backend can see the full lifecycle of every suggestion: triggered
  * signal, surfaced suggestion, user acceptance / dismissal.
- *
- * Sending happens on a background scope — when OpenClaw is offline the
- * frame is dropped and the suggestion still works locally.
  */
+interface ProactiveLogger {
+    fun logSuggestionShown(suggestion: Suggestion, signal: Signal)
+    fun logSuggestionAccepted(suggestion: Suggestion)
+    fun logSuggestionDismissed(suggestion: Suggestion, dontSuggestAgain: Boolean)
+    fun logSuggestionSkipped(signal: Signal, reason: String)
+
+    /** No-op for tests / non-DI call sites. */
+    object NoOp : ProactiveLogger {
+        override fun logSuggestionShown(suggestion: Suggestion, signal: Signal) {}
+        override fun logSuggestionAccepted(suggestion: Suggestion) {}
+        override fun logSuggestionDismissed(suggestion: Suggestion, dontSuggestAgain: Boolean) {}
+        override fun logSuggestionSkipped(signal: Signal, reason: String) {}
+    }
+}
+
 @Singleton
-class ProactiveLogger @Inject constructor(
+class OpenClawProactiveLogger @Inject constructor(
     private val protocolClient: OpenClawProtocolClient,
     private val settings: SettingsDataStore,
-) {
+) : ProactiveLogger {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun logSuggestionShown(suggestion: Suggestion, signal: Signal) =
+    override fun logSuggestionShown(suggestion: Suggestion, signal: Signal) =
         emit("jarvis.proactive_suggestion_shown") {
             put("suggestionId", JsonPrimitive(suggestion.id))
             put("signalType", JsonPrimitive(signal.type.name))
@@ -39,20 +51,20 @@ class ProactiveLogger @Inject constructor(
             put("title", JsonPrimitive(suggestion.title))
         }
 
-    fun logSuggestionAccepted(suggestion: Suggestion) =
+    override fun logSuggestionAccepted(suggestion: Suggestion) =
         emit("jarvis.proactive_suggestion_accepted") {
             put("suggestionId", JsonPrimitive(suggestion.id))
             put("signalType", JsonPrimitive(suggestion.signalType.name))
         }
 
-    fun logSuggestionDismissed(suggestion: Suggestion, dontSuggestAgain: Boolean) =
+    override fun logSuggestionDismissed(suggestion: Suggestion, dontSuggestAgain: Boolean) =
         emit("jarvis.proactive_suggestion_dismissed") {
             put("suggestionId", JsonPrimitive(suggestion.id))
             put("signalType", JsonPrimitive(suggestion.signalType.name))
             put("dontSuggestAgain", JsonPrimitive(dontSuggestAgain))
         }
 
-    fun logSuggestionSkipped(signal: Signal, reason: String) =
+    override fun logSuggestionSkipped(signal: Signal, reason: String) =
         emit("jarvis.proactive_suggestion_skipped") {
             put("signalType", JsonPrimitive(signal.type.name))
             put("reason", JsonPrimitive(reason))

@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.openclaw.jarvis.data.models.GatewayState
 import ai.openclaw.jarvis.data.models.RouteChoice
+import ai.openclaw.jarvis.proactive.ui.ProactiveSuggestionChip
 import ai.openclaw.jarvis.trust.TrustLevel
 import ai.openclaw.jarvis.ui.components.*
 import ai.openclaw.jarvis.ui.theme.*
@@ -184,6 +185,11 @@ fun MainScreen(
             }
 
             Spacer(Modifier.height(16.dp))
+
+            // Active proactive suggestion (chip-style; renders nothing when none).
+            ProactiveSuggestionChip(onAccept = { /* user-side act-on hook for the future */ })
+
+            Spacer(Modifier.height(8.dp))
 
             // Transcript panel — fills remaining space
             TranscriptPanel(
