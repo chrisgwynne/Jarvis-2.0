@@ -8,6 +8,7 @@ import androidx.navigation.compose.rememberNavController
 import ai.openclaw.jarvis.ui.screens.CapabilityDashboardScreen
 import ai.openclaw.jarvis.ui.screens.DebugScreen
 import ai.openclaw.jarvis.ui.screens.MainScreen
+import ai.openclaw.jarvis.ui.screens.PendingApprovalsScreen
 import ai.openclaw.jarvis.ui.screens.ProtocolDebugScreen
 import ai.openclaw.jarvis.ui.screens.SettingsScreen
 
@@ -17,6 +18,7 @@ object Routes {
     const val DEBUG         = "debug"
     const val PROTOCOL      = "protocol"
     const val CAPABILITIES  = "capabilities"
+    const val APPROVALS     = "approvals"
 }
 
 @Composable
@@ -35,6 +37,12 @@ fun JarvisNavGraph(
         }
         composable(Routes.SETTINGS) {
             SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenApprovals = { navController.navigate(Routes.APPROVALS) },
+            )
+        }
+        composable(Routes.APPROVALS) {
+            PendingApprovalsScreen(
                 onBack = { navController.popBackStack() },
             )
         }

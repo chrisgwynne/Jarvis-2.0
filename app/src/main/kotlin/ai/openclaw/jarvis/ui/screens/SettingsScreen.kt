@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ai.openclaw.jarvis.githubissues.ui.GitHubIssueLoggingSection
+import ai.openclaw.jarvis.policy.ui.PolicySettingsSection
 import ai.openclaw.jarvis.proactive.ui.ProactiveSettingsSection
 import ai.openclaw.jarvis.screen.ui.ScreenAwarenessSettingsSection
 import ai.openclaw.jarvis.trust.TrustLevel
@@ -27,6 +28,7 @@ import ai.openclaw.jarvis.ui.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenApprovals: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -255,6 +257,9 @@ fun SettingsScreen(
                     Text("Clear Pairing Token", fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
                 }
             }
+
+            // ── Autonomy / Approvals ──────────────────────────────────────────
+            PolicySettingsSection(onOpenApprovals = onOpenApprovals)
 
             // ── Proactive Suggestions ─────────────────────────────────────────
             ProactiveSettingsSection()

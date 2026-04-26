@@ -6,6 +6,7 @@ import ai.openclaw.jarvis.capabilities.CapabilityRegistry
 import ai.openclaw.jarvis.githubissues.integration.IssueLoggingWiring
 import ai.openclaw.jarvis.githubissues.queue.IssueQueueWorker
 import ai.openclaw.jarvis.network.OpenClawClient
+import ai.openclaw.jarvis.policy.ApprovalCoordinator
 import ai.openclaw.jarvis.proactive.ContextCollector
 import ai.openclaw.jarvis.proactive.SuggestionManager
 import ai.openclaw.jarvis.screen.ForegroundAppTracker
@@ -27,6 +28,7 @@ class JarvisApp : Application() {
     @Inject lateinit var screenshotObserver: ScreenshotObserver
     @Inject lateinit var passiveAssistManager: PassiveAssistManager
     @Inject lateinit var screenContextLogger: ScreenContextLogger
+    @Inject lateinit var approvalCoordinator: ApprovalCoordinator
 
     override fun onCreate() {
         super.onCreate()
@@ -50,5 +52,10 @@ class JarvisApp : Application() {
         screenshotObserver.start()
         passiveAssistManager.start()
         screenContextLogger.start()
+
+        // Autonomy / approval engine: starts the expiry pruner so any
+        // approvals saved on disk that have already lapsed are surfaced
+        // through the audit log on the first poll.
+        approvalCoordinator.start()
     }
 }

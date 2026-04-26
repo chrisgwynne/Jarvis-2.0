@@ -72,6 +72,10 @@ class SpeechSessionManager @Inject constructor(
     private val awarenessResponder: ai.openclaw.jarvis.awareness.AwarenessResponder,
     private val contextCollector: ai.openclaw.jarvis.proactive.ContextCollector,
     private val suggestionManager: ai.openclaw.jarvis.proactive.SuggestionManager,
+    private val policyEngine: ai.openclaw.jarvis.policy.engine.AutonomyPolicyEngine,
+    private val approvalCoordinator: ai.openclaw.jarvis.policy.ApprovalCoordinator,
+    private val descriptorMapper: ai.openclaw.jarvis.policy.integration.TypedActionDescriptorMapper,
+    private val auditLogger: ai.openclaw.jarvis.policy.integration.PolicyAuditLogger,
 ) {
     companion object {
         private const val TAG = "SpeechSessionManager"
@@ -904,28 +908,106 @@ class SpeechSessionManager @Inject constructor(
                     )
                 }
                 is ai.openclaw.jarvis.protocol.validation.ProtocolResult.Ok -> {
-                    if (action.requiresConfirmation) {
-                        val summary = ai.openclaw.jarvis.protocol.executor.confirmSummary(action)
-                        pendingTyped.stage(
-                            decoded = decoded.value,
-                            requestId = response.requestId,
-                            sessionKey = prefs.sessionKey,
-                            summary = summary,
-                        )
-                        stateMachine.transition(AssistantState.AWAITING_CONFIRMATION, "typed confirm")
-                        speakIfEnabled(summary)
-                    } else {
-                        val result = contractActions.execute(
-                            decoded = decoded.value,
-                            requestId = response.requestId,
-                            sessionKey = prefs.sessionKey,
-                        )
-                        protocolClient.sendActionResult(result)
-                    }
+                    handleDecodedAction(decoded.value, response.requestId, prefs.sessionKey)
                 }
             }
         }
     }
+
+    /**
+     * Run a single decoded typed action through the autonomy policy
+     * engine, then act on the resulting [PolicyDecision]:
+     *
+     *  - BLOCKED                     send a cancelled JarvisActionResult
+     *                                ("policy blocked: <reasons>"), do NOT execute
+     *  - PREPARE                     stage as PendingApproval (already done by
+     *                                the engine), speak the prep prompt,
+     *                                send a needs-confirmation result back
+     *  - EXECUTE_WITH_CONFIRMATION   stage + speak "Do you want me to …?",
+     *                                wait for the existing yes/no path
+     *  - EXECUTE_TRUSTED             execute now, post the result
+     *
+     * In every case, the [auditLogger] gets a `jarvis.policy_decision`
+     * event so OpenClaw sees what the engine ruled and why.
+     */
+    private suspend fun handleDecodedAction(
+        decoded: ai.openclaw.jarvis.protocol.validation.DecodedAction,
+        requestId: String,
+        sessionKey: String,
+    ) {
+        val descriptor = descriptorMapper.toDescriptor(decoded)
+        val input = ai.openclaw.jarvis.policy.model.PolicyInput(
+            speakerTrust = trustManager.currentTrustLevel(),
+            hourOfDay = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY),
+            confidence = trustManager.currentConfidence(),
+            openClawConnected = client.isConnected(),
+            openClawSuggestedLevel = if (decoded.action.requiresConfirmation)
+                ai.openclaw.jarvis.policy.model.AutonomyLevel.EXECUTE_WITH_CONFIRMATION else null,
+        )
+        val decision = policyEngine.decide(descriptor, input)
+        auditLogger.logDecision(decision)
+
+        when (decision.level) {
+            ai.openclaw.jarvis.policy.model.AutonomyLevel.OBSERVE,
+            ai.openclaw.jarvis.policy.model.AutonomyLevel.SUGGEST -> {
+                // Engine says don't act — surface a chip via the proactive
+                // pipeline instead of executing.
+                speakIfEnabled("Noted — I won't act on that without your say-so.")
+                protocolClient.sendActionResult(buildCancelled(decoded, requestId, sessionKey,
+                    code = "POLICY_OBSERVE", message = decision.reasons.joinToString("; ")))
+            }
+            ai.openclaw.jarvis.policy.model.AutonomyLevel.BLOCKED -> {
+                speakIfEnabled("That action is blocked by your settings.")
+                protocolClient.sendActionResult(buildCancelled(decoded, requestId, sessionKey,
+                    code = "POLICY_BLOCKED", message = decision.reasons.joinToString("; ")))
+            }
+            ai.openclaw.jarvis.policy.model.AutonomyLevel.PREPARE,
+            ai.openclaw.jarvis.policy.model.AutonomyLevel.EXECUTE_WITH_CONFIRMATION -> {
+                val summary = ai.openclaw.jarvis.protocol.executor.confirmSummary(decoded.action)
+                // Stage in the persistent approval store so the in-app
+                // approvals screen + notification surfaces show this too.
+                approvalCoordinator.stage(
+                    descriptor = decision.descriptor,
+                    level = decision.level,
+                    expiresAtMillis = decision.expiresAtMillis ?: (System.currentTimeMillis() + 5 * 60 * 1000L),
+                    originRequestId = requestId,
+                    originSessionKey = sessionKey,
+                ) { _ ->
+                    val result = contractActions.execute(decoded, requestId, sessionKey)
+                    protocolClient.sendActionResult(result)
+                }
+                // Also stage in the legacy typed-pending store so the
+                // existing voice yes/no path keeps working unchanged.
+                pendingTyped.stage(
+                    decoded = decoded,
+                    requestId = requestId,
+                    sessionKey = sessionKey,
+                    summary = summary,
+                )
+                stateMachine.transition(AssistantState.AWAITING_CONFIRMATION, "policy confirm")
+                speakIfEnabled(summary)
+            }
+            ai.openclaw.jarvis.policy.model.AutonomyLevel.EXECUTE_TRUSTED -> {
+                val result = contractActions.execute(decoded, requestId, sessionKey)
+                protocolClient.sendActionResult(result)
+            }
+        }
+    }
+
+    private fun buildCancelled(
+        decoded: ai.openclaw.jarvis.protocol.validation.DecodedAction,
+        requestId: String,
+        sessionKey: String,
+        code: String,
+        message: String,
+    ) = ai.openclaw.jarvis.protocol.model.JarvisActionResult(
+        requestId = requestId,
+        sessionKey = sessionKey,
+        actionId = decoded.action.actionId,
+        timestamp = ai.openclaw.jarvis.protocol.util.IsoTimestamp.now(),
+        status = ai.openclaw.jarvis.protocol.model.ActionResultStatus.cancelled,
+        error = ai.openclaw.jarvis.protocol.model.ActionResultError(code = code, message = message),
+    )
 
     /**
      * Resolve any pending typed action against the user's confirmation
