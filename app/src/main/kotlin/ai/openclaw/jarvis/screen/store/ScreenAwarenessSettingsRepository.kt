@@ -1,6 +1,7 @@
 package ai.openclaw.jarvis.screen.store
 
 import ai.openclaw.jarvis.screen.model.AppCategory
+import ai.openclaw.jarvis.util.LazyHydrate
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -16,6 +17,9 @@ import kotlinx.coroutines.flow.asStateFlow
  * The whitelist / blacklist live as comma-separated strings to keep the
  * file format compatible with future additions; nothing here is
  * sensitive so plain prefs is fine.
+ *
+ * Lazy hydration: defaults have `enabled = false` — strictly the safest
+ * behaviour, so the brief default-only window during startup is harmless.
  */
 @Singleton
 class ScreenAwarenessSettingsRepository @Inject constructor(
@@ -25,12 +29,16 @@ class ScreenAwarenessSettingsRepository @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
-    private val _settings = MutableStateFlow(load())
+    private val _settings = MutableStateFlow(ScreenAwarenessSettings())
     val settings: StateFlow<ScreenAwarenessSettings> = _settings.asStateFlow()
+
+    private val hydrate = LazyHydrate(_settings) { load() }
+    init { hydrate.start() }
 
     override fun current(): ScreenAwarenessSettings = _settings.value
 
     fun update(transform: (ScreenAwarenessSettings) -> ScreenAwarenessSettings) {
+        hydrate.markUpdated()
         val next = transform(_settings.value)
         save(next)
         _settings.value = next

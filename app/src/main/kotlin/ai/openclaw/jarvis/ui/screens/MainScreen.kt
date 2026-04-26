@@ -41,6 +41,7 @@ fun MainScreen(
     val queueSize           by viewModel.queueSize.collectAsStateWithLifecycle()
     val lastResult          by viewModel.lastResult.collectAsStateWithLifecycle()
     val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
+    val pairingChallenge by viewModel.pairingChallenge.collectAsStateWithLifecycle()
     val sessionTrust        by viewModel.sessionTrust.collectAsStateWithLifecycle()
     val debugEnabled        by viewModel.debugLogsEnabled.collectAsStateWithLifecycle()
 
@@ -211,6 +212,21 @@ fun MainScreen(
                 isDestructive = true,
                 onConfirm     = viewModel::confirmPending,
                 onDismiss     = viewModel::dismissConfirmation,
+            )
+        }
+
+        // ── Pairing challenge dialog ──────────────────────────────────────────
+        // Surfaced when OpenClaw asks the user to confirm a freshly-issued
+        // pairing code. Read-only; the user verifies the code matches what
+        // OpenClaw shows, then dismisses to acknowledge.
+        pairingChallenge?.let { challenge ->
+            ConfirmationDialog(
+                title = "Pair with OpenClaw",
+                message = "Confirm this code matches what OpenClaw is showing:\n\n" +
+                    "    ${challenge.code}",
+                isDestructive = false,
+                onConfirm = viewModel::acknowledgePairingChallenge,
+                onDismiss = viewModel::acknowledgePairingChallenge,
             )
         }
     }

@@ -4,6 +4,7 @@ import ai.openclaw.jarvis.proactive.model.Aggressiveness
 import ai.openclaw.jarvis.proactive.model.ProactiveSettings
 import ai.openclaw.jarvis.proactive.model.QuietHours
 import ai.openclaw.jarvis.proactive.model.SignalType
+import ai.openclaw.jarvis.util.LazyHydrate
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,6 +22,12 @@ import kotlinx.coroutines.flow.asStateFlow
  * The "don't suggest this again" set lives here too; it's per-suggestion
  * id, not per-signal, so a dismissed "Analyse last screenshot?" doesn't
  * also kill "Switch to voice mode?".
+ *
+ * Lazy hydration: the SharedPreferences file open + first read happen on
+ * a background coroutine after construction. The defaults
+ * (`enabled = true` but the proactive engine's per-signal cooldowns
+ * mean nothing fires for several seconds anyway) make the brief window
+ * harmless.
  */
 @Singleton
 class ProactiveSettingsRepository @Inject constructor(
@@ -29,12 +36,16 @@ class ProactiveSettingsRepository @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
-    private val _settings = MutableStateFlow(load())
+    private val _settings = MutableStateFlow(ProactiveSettings())
     val settings: StateFlow<ProactiveSettings> = _settings.asStateFlow()
+
+    private val hydrate = LazyHydrate(_settings) { load() }
+    init { hydrate.start() }
 
     override fun current(): ProactiveSettings = _settings.value
 
     fun update(transform: (ProactiveSettings) -> ProactiveSettings) {
+        hydrate.markUpdated()
         val next = transform(_settings.value)
         save(next)
         _settings.value = next

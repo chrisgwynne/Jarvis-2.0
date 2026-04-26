@@ -1,5 +1,6 @@
 package ai.openclaw.jarvis.githubissues.settings
 
+import ai.openclaw.jarvis.util.LazyHydrate
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -13,6 +14,11 @@ import kotlinx.coroutines.flow.asStateFlow
  * Persists the (non-sensitive) parts of [GitHubIssueLoggingSettings] in a
  * regular SharedPreferences file. The token itself is delegated to
  * [SecureTokenStore] so this file never holds plaintext credentials.
+ *
+ * Lazy hydration: the SharedPreferences file open + first read happen on
+ * a background coroutine after construction. Until that completes
+ * `current()` returns the safe default (`enabled = false`) — strictly
+ * stricter than any persisted state, so the brief window is harmless.
  */
 @Singleton
 class GitHubIssueSettingsRepository @Inject constructor(
@@ -22,12 +28,19 @@ class GitHubIssueSettingsRepository @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
-    private val _settings = MutableStateFlow(load())
+    private val _settings = MutableStateFlow(GitHubIssueLoggingSettings())
     val settings: StateFlow<GitHubIssueLoggingSettings> = _settings.asStateFlow()
+
+    private val hydrate = LazyHydrate(_settings) {
+        load().copy(tokenConfigured = tokenStore.hasToken())
+    }
+
+    init { hydrate.start() }
 
     override fun current(): GitHubIssueLoggingSettings = _settings.value
 
     fun update(transform: (GitHubIssueLoggingSettings) -> GitHubIssueLoggingSettings) {
+        hydrate.markUpdated()
         val next = transform(_settings.value).copy(tokenConfigured = tokenStore.hasToken())
         save(next)
         _settings.value = next

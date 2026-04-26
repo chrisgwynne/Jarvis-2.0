@@ -2,6 +2,7 @@ package ai.openclaw.jarvis.policy.store
 
 import ai.openclaw.jarvis.policy.model.ActionKind
 import ai.openclaw.jarvis.policy.model.AutonomyLevel
+import ai.openclaw.jarvis.util.LazyHydrate
 import android.content.Context
 import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,6 +16,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * SharedPreferences-backed persistence for [PolicySettings]. Per-action
  * overrides are stored as discrete `override_<KIND>` entries so adding
  * a new ActionKind doesn't break old saved files.
+ *
+ * Lazy hydration: defaults are BALANCED + requireConfirmAllOutbound=true,
+ * which is strictly stricter than any persisted user override could
+ * be — so the brief default-only window during startup is harmless.
  */
 @Singleton
 class PolicySettingsRepository @Inject constructor(
@@ -24,12 +29,16 @@ class PolicySettingsRepository @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences(FILE_NAME, Context.MODE_PRIVATE)
 
-    private val _settings = MutableStateFlow(load())
+    private val _settings = MutableStateFlow(PolicySettings())
     val settings: StateFlow<PolicySettings> = _settings.asStateFlow()
+
+    private val hydrate = LazyHydrate(_settings) { load() }
+    init { hydrate.start() }
 
     override fun current(): PolicySettings = _settings.value
 
     fun update(transform: (PolicySettings) -> PolicySettings) {
+        hydrate.markUpdated()
         val next = transform(_settings.value)
         save(next)
         _settings.value = next

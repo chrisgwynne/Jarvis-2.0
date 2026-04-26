@@ -49,6 +49,17 @@ class MainViewModel @Inject constructor(
     private val _lastResult = MutableStateFlow<String?>(null)
     val lastResult: StateFlow<String?> = _lastResult.asStateFlow()
 
+    /**
+     * Pairing challenge surfaced from `OpenClawClient` so a user can
+     * read the code off OpenClaw and confirm it on the phone. Cleared
+     * by [acknowledgePairingChallenge] when the user dismisses the
+     * dialog, or replaced by a fresh challenge if the timer expires.
+     */
+    private val _pairingChallenge = MutableStateFlow<PairingChallenge?>(null)
+    val pairingChallenge: StateFlow<PairingChallenge?> = _pairingChallenge.asStateFlow()
+
+    fun acknowledgePairingChallenge() { _pairingChallenge.value = null }
+
     init {
         // Mirror latest route from transcript
         viewModelScope.launch {
@@ -71,10 +82,22 @@ class MainViewModel @Inject constructor(
         // Mirror assistant replies to complete pending log entries
         viewModelScope.launch {
             gatewayClient.events.collect { event ->
-                if (event is GatewayEvent.AssistantReply) {
-                    val reply = event.frame.spokenReply ?: event.frame.text ?: return@collect
-                    val eventId = event.frame.eventId ?: return@collect
-                    sessionLogger.completePending(eventId, reply)
+                when (event) {
+                    is GatewayEvent.AssistantReply -> {
+                        val reply = event.frame.spokenReply ?: event.frame.text
+                        val eventId = event.frame.eventId
+                        if (reply != null && eventId != null) {
+                            sessionLogger.completePending(eventId, reply)
+                        }
+                    }
+                    is GatewayEvent.PairingChallenge -> {
+                        _pairingChallenge.value = PairingChallenge(
+                            code = event.code,
+                            expiresAtMillis = System.currentTimeMillis() +
+                                event.expiresIn * 1000L,
+                        )
+                    }
+                    else -> Unit
                 }
             }
         }
@@ -90,3 +113,13 @@ class MainViewModel @Inject constructor(
     fun confirmPending() = voiceFrontend.confirmPending()
     fun dismissConfirmation() = voiceFrontend.dismissConfirmation()
 }
+
+/**
+ * UI-side projection of [GatewayEvent.PairingChallenge] — the code the
+ * user has to confirm to finish device pairing, plus when the code
+ * expires so the dialog can show a countdown.
+ */
+data class PairingChallenge(
+    val code: String,
+    val expiresAtMillis: Long,
+)

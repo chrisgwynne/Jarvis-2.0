@@ -1,12 +1,14 @@
 # Jarvis Android — TODO
 
+> **Status update (post-hardening pass):** several P1 items are now fixed.
+> Marked items below are kept for traceability; new items appear at the
+> top of P1 / P4 as needed. Full bug list in `docs/android-hardening-report.md`.
+
 ## P0 — Must complete before first real use
 
-- [ ] **Wake word integration**
-  - Interface exists (`wakeWordEnabled` in settings, toggled off).
-  - Implement with Picovoice Porcupine or Vosk offline model.
-  - Wake word listener must run in a foreground service with persistent notification.
-  - On wake: start STT automatically; cancel on silence or PTT press.
+- [x] **Wake word integration** — implemented via `WakeWordController` +
+  `AlwaysListeningService` foreground service + `WakeAcknowledger` for the
+  sub-150 ms tone. Picovoice / Vosk swap is still optional refinement.
 
 - [ ] **Launcher icons** — replace placeholder `ic_launcher` with custom Jarvis blueprint orb icon.
 
@@ -20,14 +22,16 @@
 
 ## P1 — Improve reliability
 
+- [x] **`node.invoke` dispatcher** — `NodeInvokeDispatcher` (added in the
+  hardening pass) subscribes to `GatewayEvent.InvokeCommand`, dispatches to
+  the legacy `AndroidActionExecutor.execute` entry point, and answers with
+  `node.invoke.result`. Started from `JarvisApp.onCreate`.
+
+- [x] **Handle `pairing.challenge` in UI** — `MainViewModel.pairingChallenge`
+  surfaces the code; `MainScreen` renders a `ConfirmationDialog`.
+
 - [ ] **STT must run on Main thread** — `SpeechRecognizer` requires Main thread; ensure
   `VoiceFrontend.startListening()` always dispatches on `Dispatchers.Main`.
-
-- [ ] **Handle `pairing.challenge` in UI** — show the pairing code on the main screen in a dialog
-  so the user can confirm it. Currently the code is emitted as a `GatewayEvent` but not surfaced.
-
-- [ ] **`node.invoke` dispatcher** — `OpenClawClient` emits `GatewayEvent.InvokeCommand` but nothing
-  currently picks it up. Wire it through `AndroidActionExecutor` and send a `node.invoke.result`.
 
 - [ ] **Screenshot flow full wiring** — `ScreenshotCapability` needs `setProjectionResult()` called
   from `MainActivity` after the `startActivityForResult` callback. Add the result handler in
@@ -67,8 +71,18 @@
 
 ## P4 — Production hardening
 
-- [ ] **Retry policy for offline queue** — currently all queued events flush in one burst.
-  Add per-event retry counter and back-off for events that fail to send.
+- [x] **Retry policy for offline queue** — `IssueQueueWorker` does capped
+  exponential backoff per draft; transient vs terminal failure is decided
+  at the API client.
+
+- [x] **ProGuard / R8** — `proguard-rules.pro` keeps every serialization-
+  annotated model and Hilt-injected class, AND uses `-assumenosideeffects`
+  to strip `Log.d` / `Log.v` from release builds (defence-in-depth on top
+  of `LogRedaction`).
+
+- [x] **Lazy SharedPreferences hydration** — `LazyHydrate` defers all four
+  repository disk reads to a background coroutine so `JarvisApp.onCreate`
+  no longer blocks on prefs file I/O.
 
 - [ ] **DataStore migration versioning** — add a schema version to `OfflineQueueStore` so
   future model changes don't corrupt the queue.
@@ -77,8 +91,6 @@
   `OfflineQueueStore` are all pure logic and easy to unit-test.
 
 - [ ] **Instrumented tests** — capability availability checks, DataStore round-trip.
-
-- [ ] **ProGuard / R8** — verify release build keeps all serialization-annotated models.
 
 - [ ] **CI pipeline** — `./gradlew lint test assembleRelease` on every push.
 

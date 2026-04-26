@@ -135,3 +135,21 @@ docs/android-hardening-report.md                                                
 ```
 
 No production behaviour was removed — every change is either a redaction or a defensive guard. Existing `manual-test-plan.md` Phase-4 cases continue to apply unchanged.
+
+---
+
+## Follow-up pass
+
+Subsequent commit (`fix any of the items in todo.md…`) closed several of the
+listed limitations and the highest-impact P1 TODO items:
+
+| # | Severity | Area | What changed |
+|---|---------|------|--------------|
+| 7 | High | OpenClaw broken path | New `network/NodeInvokeDispatcher.kt` subscribes to `GatewayEvent.InvokeCommand`, dispatches to `AndroidActionExecutor.execute`, and answers with `node.invoke.result`. Started from `JarvisApp.onCreate`. Without this the legacy invocation channel was silently dropping every frame OpenClaw sent. |
+| 8 | Medium | Pairing UX | `MainViewModel.pairingChallenge: StateFlow<PairingChallenge?>` now consumes `GatewayEvent.PairingChallenge`; `MainScreen` renders a `ConfirmationDialog` so the user can verify the code matches what OpenClaw is showing. Previously the code was emitted but never surfaced. |
+| 9 | Medium | Cold-start cost | New `util/LazyHydrate.kt` defers `SharedPreferences.load()` for all four settings repositories to a background coroutine. Defaults are strictly safer than any persisted user state, so the brief default-only window during startup is harmless. CAS guard ensures a manual `update()` during hydration always wins over the loaded value. |
+| 10 | Low | Defence-in-depth | `proguard-rules.pro` now uses `-assumenosideeffects` to strip `Log.d` / `Log.v` from release builds, plus `-keepclasseswithmembers` on every protocol / capability / policy / proactive / screen model so kotlinx-serialization + Hilt @Inject still resolve. `Log.w` / `Log.e` are kept on purpose. |
+
+Tests added: `LazyHydrateTest` (default → loaded transition + CAS guard
+against in-flight overwrite) and `NodeInvokeDispatcherParamFlatteningTest`
+(JSON params → string-map flattening contract).

@@ -5,6 +5,7 @@ import dagger.hilt.android.HiltAndroidApp
 import ai.openclaw.jarvis.capabilities.CapabilityRegistry
 import ai.openclaw.jarvis.githubissues.integration.IssueLoggingWiring
 import ai.openclaw.jarvis.githubissues.queue.IssueQueueWorker
+import ai.openclaw.jarvis.network.NodeInvokeDispatcher
 import ai.openclaw.jarvis.network.OpenClawClient
 import ai.openclaw.jarvis.policy.ApprovalCoordinator
 import ai.openclaw.jarvis.proactive.ContextCollector
@@ -29,12 +30,18 @@ class JarvisApp : Application() {
     @Inject lateinit var passiveAssistManager: PassiveAssistManager
     @Inject lateinit var screenContextLogger: ScreenContextLogger
     @Inject lateinit var approvalCoordinator: ApprovalCoordinator
+    @Inject lateinit var nodeInvokeDispatcher: NodeInvokeDispatcher
 
     override fun onCreate() {
         super.onCreate()
         // Advertise capabilities to Gateway before connecting
         gatewayClient.advertisedCapabilities = capabilityRegistry.toAdvertisements()
         gatewayClient.connect()
+
+        // Subscribe to OpenClaw `node.invoke` frames so we can answer back
+        // with `node.invoke.result`. Without this the legacy invocation
+        // channel is silently dropped on the floor.
+        nodeInvokeDispatcher.start()
 
         // GitHub Issue Logging: subscribe to ERROR_RECOVERY transitions
         // and start draining any issues queued while offline.
