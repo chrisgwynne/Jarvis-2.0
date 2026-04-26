@@ -33,10 +33,10 @@ class ScreenshotAutoAnalyser @Inject constructor(
     private val protocolClient: OpenClawProtocolClient,
     private val settings: SettingsDataStore,
     private val bus: ScreenContextBus,
-) {
+) : ScreenshotAnalyser {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    fun analyse(shot: ScreenshotCaptured) {
+    override fun analyse(shot: ScreenshotCaptured) {
         scope.launch {
             if (openClawClient.gatewayState.value != GatewayState.CONNECTED) return@launch
             val sessionKey = runCatching { settings.settings.first().sessionKey }

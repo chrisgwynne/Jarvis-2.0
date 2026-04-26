@@ -14,7 +14,7 @@ import ai.openclaw.jarvis.screen.model.ScreenContextEvent
 import ai.openclaw.jarvis.screen.model.ScreenshotCaptured
 import ai.openclaw.jarvis.screen.store.ScreenAwarenessSettingsSource
 import ai.openclaw.jarvis.trust.TrustLevel
-import ai.openclaw.jarvis.trust.TrustManager
+import ai.openclaw.jarvis.trust.TrustLevelProvider
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
@@ -54,8 +54,8 @@ class PassiveAssistManager @Inject constructor(
     private val interpreter: ContextInterpreter,
     private val suggestionManager: SuggestionManager,
     private val settingsSource: ScreenAwarenessSettingsSource,
-    private val trustManager: TrustManager,
-    private val openClawAnalyser: ScreenshotAutoAnalyser,
+    private val trust: TrustLevelProvider,
+    private val openClawAnalyser: ScreenshotAnalyser,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var running = false
@@ -186,8 +186,8 @@ class PassiveAssistManager @Inject constructor(
         .get(java.util.Calendar.HOUR_OF_DAY)
 
     private fun currentTrustName(): String =
-        runCatching { trustManager.currentTrustLevel().name }.getOrDefault("UNKNOWN")
+        runCatching { trust.current().name }.getOrDefault("UNKNOWN")
 
     private fun ownerVerified(): Boolean =
-        runCatching { trustManager.currentTrustLevel() }.getOrDefault(TrustLevel.UNKNOWN) != TrustLevel.UNKNOWN
+        runCatching { trust.current() }.getOrDefault(TrustLevel.UNKNOWN) != TrustLevel.UNKNOWN
 }

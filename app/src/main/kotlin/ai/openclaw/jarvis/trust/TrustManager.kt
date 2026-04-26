@@ -23,9 +23,11 @@ data class SessionTrust(
 class TrustManager @Inject constructor(
     private val identityManager: SpeakerIdentityManager,
     private val passphraseStore: PassphraseStore,
-) {
+) : TrustLevelProvider {
     private val _sessionTrust = MutableStateFlow<SessionTrust?>(null)
     val sessionTrust: StateFlow<SessionTrust?> = _sessionTrust.asStateFlow()
+
+    override fun current(): TrustLevel = currentTrustLevel()
 
     // ─── Session activation ───────────────────────────────────────────────────
 
