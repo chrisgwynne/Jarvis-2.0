@@ -62,6 +62,12 @@ class SpeechSessionManager @Inject constructor(
     private val routingHook: ai.openclaw.jarvis.githubissues.integration.RoutingHook,
     private val correctionDetector: ai.openclaw.jarvis.githubissues.detect.UserCorrectionDetector,
     private val issueContextBuilder: ai.openclaw.jarvis.githubissues.integration.IssueContextBuilder,
+    private val protocolClient: ai.openclaw.jarvis.protocol.client.OpenClawProtocolClient,
+    private val typedCapabilities: ai.openclaw.jarvis.protocol.TypedCapabilitySnapshotBuilder,
+    private val contractActions: ai.openclaw.jarvis.protocol.executor.ContractActionExecutor,
+    private val pendingTyped: ai.openclaw.jarvis.protocol.executor.ContractPendingActions,
+    private val protocolValidator: ai.openclaw.jarvis.protocol.validation.ProtocolValidator,
+    private val deviceContextBuilder: ai.openclaw.jarvis.protocol.DeviceContextBuilder,
 ) {
     companion object {
         private const val TAG = "SpeechSessionManager"
@@ -130,6 +136,9 @@ class SpeechSessionManager @Inject constructor(
                 }
             }
         }
+
+        // Wire the typed-protocol response / malformed / skill manifest handlers.
+        registerTypedProtocolHandlers()
     }
 
     // ─── Session control ──────────────────────────────────────────────────────
@@ -221,6 +230,15 @@ class SpeechSessionManager @Inject constructor(
                 voiceHook.onEmptyTranscript("captured but empty", issueContextBuilder.build())
             }
             stateMachine.transition(AssistantState.IDLE_LISTENING, "no input")
+            audioRouter.releaseAudioFocus()
+            return
+        }
+
+        // 3a. First, see if this utterance resolves a pending typed contract
+        //     action. The typed path runs its own action executor and sends
+        //     the JarvisActionResult back to OpenClaw.
+        if (maybeResolveTypedConfirmation(finalText)) {
+            addTranscript("user", finalText, "confirm")
             audioRouter.releaseAudioFocus()
             return
         }
@@ -506,6 +524,8 @@ class SpeechSessionManager @Inject constructor(
         val eventId = UUID.randomUUID().toString()
         logger.logPending(parsed.rawText, parsed.toRouteDecision(), eventId, prefs)
         if (client.isConnected()) {
+            // 1. Legacy path — kept so backends that still expect
+            //    `user.message` and `assistant.reply` keep working.
             client.sendUserMessage(
                 text               = parsed.rawText,
                 sessionKey         = prefs.sessionKey,
@@ -514,6 +534,11 @@ class SpeechSessionManager @Inject constructor(
                 trustLevel         = trustManager.currentTrustLevel().name,
                 identityConfidence = trustManager.currentConfidence(),
             )
+            // 2. Typed contract path — also send the strict JarvisLiveRequest
+            //    so OpenClaw can reply with a strict OpenClawResponse the
+            //    OpenClawProtocolClient parses and routes through the typed
+            //    action executor.
+            sendTypedLiveRequest(parsed, prefs, eventId)
         } else {
             stateMachine.transition(AssistantState.ERROR_RECOVERY, "gateway offline")
             val strategy = errorRecovery.strategyFor(
@@ -658,6 +683,220 @@ class SpeechSessionManager @Inject constructor(
                     actionHook.onSmsFailure(code, outcome.spokenReply, ctx)
                 }
         }
+    }
+
+    // ─── Typed protocol path ─────────────────────────────────────────────────
+
+    /**
+     * Build and send a strict [ai.openclaw.jarvis.protocol.model.JarvisLiveRequest]
+     * for the same utterance. Runs alongside the legacy `user.message`
+     * frame; OpenClaw replies on the typed channel via
+     * `OpenClawResponse` (parsed by [protocolClient]).
+     */
+    private suspend fun sendTypedLiveRequest(
+        parsed: ParsedIntent,
+        prefs: JarvisSettings,
+        requestId: String,
+    ) {
+        val now = ai.openclaw.jarvis.protocol.util.IsoTimestamp.now()
+        val request = ai.openclaw.jarvis.protocol.model.JarvisLiveRequest(
+            requestId = requestId,
+            sessionKey = prefs.sessionKey,
+            timestamp = now,
+            speaker = ai.openclaw.jarvis.protocol.model.SpeakerInfo(
+                id = trustManager.currentSpeakerId(),
+                trustLevel = trustManager.currentTrustLevel().name,
+                confidence = trustManager.currentConfidence(),
+            ),
+            input = ai.openclaw.jarvis.protocol.model.InputInfo(
+                mode = "voice",
+                text = parsed.rawText,
+                audioSource = audioRouter.activeDevice.name.lowercase(),
+            ),
+            route = ai.openclaw.jarvis.protocol.model.RouteInfo(
+                chosen = parsed.toRouteDecision().chosen.name,
+                localIntent = parsed.type.name,
+                confidence = parsed.confidence,
+            ),
+            deviceContext = deviceContextBuilder.build(),
+            capabilities = typedCapabilities.build(),
+        )
+        protocolClient.sendLiveRequest(request)
+    }
+
+    /**
+     * Subscribe to typed [OpenClawProtocolClient.responses] (registered from
+     * [registerTypedProtocolHandlers], called once from `init`). For each
+     * typed response:
+     *   - speak / display reply.text per the directive
+     *   - dispatch each action: confirm-first if the action requires it,
+     *     otherwise execute immediately and post the [JarvisActionResult].
+     *
+     * Malformed responses are routed via [openClawHook.onMalformedResponse]
+     * which feeds the GitHub Issue Logger and trips ERROR_RECOVERY.
+     */
+    fun registerTypedProtocolHandlers() {
+        scope.launch {
+            protocolClient.responses.collect { response -> handleTypedResponse(response) }
+        }
+        scope.launch {
+            protocolClient.malformed.collect { err ->
+                openClawHook.onMalformedResponse(
+                    rawDigest = err.message,
+                    context = issueContextBuilder.build(),
+                )
+                stateMachine.transition(AssistantState.ERROR_RECOVERY, "malformed response")
+                stateMachine.transition(AssistantState.IDLE_LISTENING, "recovered")
+            }
+        }
+        // Pull a fresh skill manifest on every gateway reconnect.
+        scope.launch {
+            client.gatewayState.collect { gs ->
+                if (gs == ai.openclaw.jarvis.data.models.GatewayState.CONNECTED) {
+                    val prefs = settings.settings.first()
+                    protocolClient.requestSkillManifest(
+                        requestId = java.util.UUID.randomUUID().toString(),
+                        sessionKey = prefs.sessionKey,
+                        timestamp = ai.openclaw.jarvis.protocol.util.IsoTimestamp.now(),
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun handleTypedResponse(
+        response: ai.openclaw.jarvis.protocol.model.OpenClawResponse,
+    ) {
+        val prefs = settings.settings.first()
+
+        if (response.status == ai.openclaw.jarvis.protocol.model.ResponseStatus.error) {
+            openClawHook.onContractViolation(
+                detail = response.error?.let { "${it.code}: ${it.message}" } ?: "OpenClaw error",
+                context = issueContextBuilder.build(),
+            )
+            stateMachine.transition(AssistantState.ERROR_RECOVERY, "openclaw error")
+            stateMachine.transition(AssistantState.IDLE_LISTENING, "recovered")
+            return
+        }
+
+        // Speak / display the textual part if directed.
+        val text = response.reply.text
+        if (text.isNotBlank()) {
+            if (response.reply.display) addTranscript("jarvis", text, "OpenClaw")
+            if (response.reply.speak && !interrupted && prefs.ttsEnabled) {
+                stateMachine.transition(AssistantState.SPEAKING, "openclaw reply")
+                audioRouter.prepareForPlayback()
+                tts.speak(text, prefs.ttsSpeed, prefs.ttsPitch)
+                stateMachine.transition(AssistantState.IDLE_LISTENING, "reply spoken")
+            }
+        }
+
+        // Then process each action through the typed contract path.
+        for (action in response.actions) {
+            val decoded = protocolValidator.decodeAction(action)
+            when (decoded) {
+                is ai.openclaw.jarvis.protocol.validation.ProtocolResult.Rejected -> {
+                    val result = ai.openclaw.jarvis.protocol.model.JarvisActionResult(
+                        requestId = response.requestId,
+                        sessionKey = prefs.sessionKey,
+                        actionId = action.actionId,
+                        timestamp = ai.openclaw.jarvis.protocol.util.IsoTimestamp.now(),
+                        status = when (decoded.error.code) {
+                            ai.openclaw.jarvis.protocol.validation.ProtocolError.Code.MISSING_FIELDS ->
+                                ai.openclaw.jarvis.protocol.model.ActionResultStatus.failed
+                            ai.openclaw.jarvis.protocol.validation.ProtocolError.Code.UNKNOWN_ACTION_TYPE ->
+                                ai.openclaw.jarvis.protocol.model.ActionResultStatus.unsupported
+                            else -> ai.openclaw.jarvis.protocol.model.ActionResultStatus.failed
+                        },
+                        error = ai.openclaw.jarvis.protocol.model.ActionResultError(
+                            code = decoded.error.code.name,
+                            message = decoded.error.message,
+                        ),
+                    )
+                    protocolClient.sendActionResult(result)
+                    openClawHook.onContractViolation(
+                        detail = "Action ${action.type}: ${decoded.error.message}",
+                        context = issueContextBuilder.build(),
+                    )
+                }
+                is ai.openclaw.jarvis.protocol.validation.ProtocolResult.Ok -> {
+                    if (action.requiresConfirmation) {
+                        val summary = ai.openclaw.jarvis.protocol.executor.confirmSummary(action)
+                        pendingTyped.stage(
+                            decoded = decoded.value,
+                            requestId = response.requestId,
+                            sessionKey = prefs.sessionKey,
+                            summary = summary,
+                        )
+                        stateMachine.transition(AssistantState.AWAITING_CONFIRMATION, "typed confirm")
+                        speakIfEnabled(summary)
+                    } else {
+                        val result = contractActions.execute(
+                            decoded = decoded.value,
+                            requestId = response.requestId,
+                            sessionKey = prefs.sessionKey,
+                        )
+                        protocolClient.sendActionResult(result)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve any pending typed action against the user's confirmation
+     * utterance. Called from [runSession] alongside the legacy
+     * [pendingActionManager] resolution. Returns true when the utterance
+     * matched a typed pending action (so the caller skips the legacy
+     * resolver).
+     */
+    suspend fun maybeResolveTypedConfirmation(utterance: String): Boolean {
+        val pending = pendingTyped.current() ?: return false
+        if (pending.isExpired) {
+            pendingTyped.clear()
+            sendCancelledResult(pending, code = "EXPIRED", message = "Confirmation expired")
+            return true
+        }
+        val n = utterance.trim().lowercase()
+        val confirm = listOf("yes", "yeah", "yep", "yup", "sure", "ok", "okay", "do it", "confirm", "go ahead")
+        val deny = listOf("no", "nope", "cancel", "stop", "don't", "abort", "never mind", "nevermind")
+        return when {
+            confirm.any { n.contains(it) } -> {
+                pendingTyped.consume()
+                val result = contractActions.execute(
+                    decoded = pending.decoded,
+                    requestId = pending.requestId,
+                    sessionKey = pending.sessionKey,
+                )
+                protocolClient.sendActionResult(result)
+                stateMachine.transition(AssistantState.IDLE_LISTENING, "typed confirmed")
+                true
+            }
+            deny.any { n.contains(it) } -> {
+                pendingTyped.consume()
+                sendCancelledResult(pending, code = "USER_CANCELLED", message = "User declined")
+                stateMachine.transition(AssistantState.IDLE_LISTENING, "typed denied")
+                true
+            }
+            else -> false
+        }
+    }
+
+    private suspend fun sendCancelledResult(
+        pending: ai.openclaw.jarvis.protocol.executor.ContractPendingActions.PendingTyped,
+        code: String,
+        message: String,
+    ) {
+        protocolClient.sendActionResult(
+            ai.openclaw.jarvis.protocol.model.JarvisActionResult(
+                requestId = pending.requestId,
+                sessionKey = pending.sessionKey,
+                actionId = pending.decoded.action.actionId,
+                timestamp = ai.openclaw.jarvis.protocol.util.IsoTimestamp.now(),
+                status = ai.openclaw.jarvis.protocol.model.ActionResultStatus.cancelled,
+                error = ai.openclaw.jarvis.protocol.model.ActionResultError(code = code, message = message),
+            )
+        )
     }
 }
 
