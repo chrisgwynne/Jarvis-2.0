@@ -76,6 +76,11 @@ class SpeechSessionManager @Inject constructor(
     private val approvalCoordinator: ai.openclaw.jarvis.policy.ApprovalCoordinator,
     private val descriptorMapper: ai.openclaw.jarvis.policy.integration.TypedActionDescriptorMapper,
     private val auditLogger: ai.openclaw.jarvis.policy.integration.PolicyAuditLogger,
+    private val streamingTts: ai.openclaw.jarvis.streaming.tts.StreamingTtsController,
+    private val wakeAcknowledger: ai.openclaw.jarvis.streaming.wake.WakeAcknowledger,
+    private val partialIntentDetector: ai.openclaw.jarvis.streaming.stt.PartialIntentDetector,
+    private val predictiveResolver: ai.openclaw.jarvis.streaming.stt.PredictiveResolver,
+    private val interruptDetector: ai.openclaw.jarvis.streaming.interrupt.InterruptPhraseDetector,
 ) {
     companion object {
         private const val TAG = "SpeechSessionManager"
@@ -210,6 +215,10 @@ class SpeechSessionManager @Inject constructor(
         val prefs = settings.settings.first()
 
         stateMachine.transition(AssistantState.WAKE_DETECTED, trigger.name)
+        // Sub-150ms acknowledgement — fires in the same coroutine before
+        // STT spins up so the user hears something the moment the wake
+        // word lands.
+        wakeAcknowledger.acknowledge()
         audioRouter.prepareForCapture()
 
         // 1. Identity check — only when trust session has expired and profiles exist
@@ -225,8 +234,24 @@ class SpeechSessionManager @Inject constructor(
             stt.listen().collect { event ->
                 if (interrupted) return@collect
                 when (event) {
-                    is SttEvent.Partial -> _partialText.value = event.text
-                    is SttEvent.Final   -> { finalText = event.text; _partialText.value = "" }
+                    is SttEvent.Partial -> {
+                        _partialText.value = event.text
+                        // Barge-in: if the assistant is currently speaking
+                        // and the user says stop / wait / cancel, kill TTS
+                        // and any in-flight execution immediately.
+                        if (streamingTts.speaking.value &&
+                            interruptDetector.isInterrupt(event.text)) {
+                            handleBargeInInterrupt()
+                        }
+                        // Predictive routing: pre-resolve contacts / apps
+                        // while the partial grows. Never executes anything.
+                        predictiveResolver.prepare(partialIntentDetector.guess(event.text))
+                    }
+                    is SttEvent.Final   -> {
+                        finalText = event.text
+                        _partialText.value = ""
+                        predictiveResolver.reset()
+                    }
                     is SttEvent.Error   -> {
                         Log.w(TAG, "STT error ${event.code}: ${event.message}")
                         voiceHook.onSttFailure(
@@ -837,6 +862,56 @@ class SpeechSessionManager @Inject constructor(
                 stateMachine.transition(AssistantState.IDLE_LISTENING, "recovered")
             }
         }
+        // Streaming OpenClawResponseChunk path — start the streaming TTS
+        // on the first chunk, feed deltas as they arrive, finish on
+        // chunk.final. Errors / actions on the final chunk get folded
+        // into the existing typed-response handler via a synthesised
+        // OpenClawResponse so policy / contract executor still apply.
+        scope.launch {
+            var streamingRequestId: String? = null
+            val agg = StringBuilder()
+            protocolClient.chunks.collect { chunk ->
+                val prefs = settings.settings.first()
+                if (streamingRequestId != chunk.requestId) {
+                    streamingRequestId = chunk.requestId
+                    agg.setLength(0)
+                    streamingTts.begin(prefs.ttsSpeed, prefs.ttsPitch)
+                    if (!interrupted && prefs.ttsEnabled) {
+                        audioRouter.prepareForPlayback()
+                        stateMachine.transition(AssistantState.SPEAKING, "openclaw stream")
+                    }
+                }
+                if (chunk.replyDelta.isNotEmpty()) {
+                    agg.append(chunk.replyDelta)
+                    if (prefs.ttsEnabled && !interrupted) streamingTts.feedDelta(chunk.replyDelta)
+                }
+                if (chunk.final) {
+                    streamingTts.finish()
+                    if (agg.isNotEmpty()) addTranscript("jarvis", agg.toString(), "OpenClaw")
+                    streamingRequestId = null
+                    // Fold into the existing typed-response path so the
+                    // ResponseStatus + actions[] still flow through policy
+                    // + the contract executor.
+                    val finalResponse = ai.openclaw.jarvis.protocol.model.OpenClawResponse(
+                        requestId = chunk.requestId,
+                        sessionId = chunk.sessionId,
+                        timestamp = chunk.timestamp,
+                        reply = ai.openclaw.jarvis.protocol.model.ReplyDirective(
+                            text = agg.toString(),
+                            speak = false,   // already streamed
+                            display = false, // already added to transcript
+                        ),
+                        actions = chunk.actions,
+                        requiresConfirmation = false,
+                        memoryCandidate = false,
+                        status = chunk.status,
+                        error = chunk.error,
+                    )
+                    handleTypedResponse(finalResponse)
+                    stateMachine.transition(AssistantState.IDLE_LISTENING, "stream done")
+                }
+            }
+        }
         // Pull a fresh skill manifest on every gateway reconnect.
         scope.launch {
             client.gatewayState.collect { gs ->
@@ -850,6 +925,20 @@ class SpeechSessionManager @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Stop in-flight TTS + return to listening. Used by the partial-STT
+     * barge-in detector when the user says stop / wait / cancel while
+     * the assistant is mid-speech.
+     */
+    private fun handleBargeInInterrupt() {
+        streamingTts.interrupt()
+        // tts.stop() also covers the legacy non-streaming path so a single
+        // interrupt covers both.
+        runCatching { tts.stop() }
+        stateMachine.interrupt("user barge-in")
+        addTranscript("jarvis", "(stopped)", "Interrupt")
     }
 
     private suspend fun handleTypedResponse(

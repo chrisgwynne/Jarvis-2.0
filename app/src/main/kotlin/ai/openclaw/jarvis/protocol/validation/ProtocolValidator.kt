@@ -98,6 +98,26 @@ class ProtocolValidator @Inject constructor() {
         else ProtocolResult.Ok(manifest)
     }
 
+    fun parseResponseChunk(raw: String): ProtocolResult<ai.openclaw.jarvis.protocol.model.OpenClawResponseChunk> = parseOf(raw) {
+        json.decodeFromString(ai.openclaw.jarvis.protocol.model.OpenClawResponseChunk.serializer(), it)
+    }.flatMap { chunk ->
+        when {
+            !ProtocolVersion.isSupported(chunk.protocolVersion) -> ProtocolResult.Rejected(
+                ProtocolError(
+                    code = ProtocolError.Code.UNSUPPORTED_PROTOCOL_VERSION,
+                    message = "Response chunk protocolVersion='${chunk.protocolVersion}' not supported",
+                )
+            )
+            chunk.requestId.isBlank() -> ProtocolResult.Rejected(
+                ProtocolError(
+                    code = ProtocolError.Code.MISSING_FIELDS,
+                    message = "Response chunk missing requestId",
+                )
+            )
+            else -> ProtocolResult.Ok(chunk)
+        }
+    }
+
     /**
      * Decode the action payload into one of the [PayloadSendSms] / etc.
      * concrete types based on [OpenClawAction.type]. Validates required

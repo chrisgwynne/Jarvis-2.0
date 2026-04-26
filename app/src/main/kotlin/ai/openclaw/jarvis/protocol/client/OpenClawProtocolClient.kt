@@ -59,6 +59,18 @@ class OpenClawProtocolClient @Inject constructor(
     private val _skillManifest = MutableStateFlow<OpenClawSkillManifest?>(null)
     val skillManifest: StateFlow<OpenClawSkillManifest?> = _skillManifest.asStateFlow()
 
+    /**
+     * Streamed chunks for in-flight requests. Each [OpenClawResponseChunk]
+     * carries a `replyDelta` and a `final` flag — consumers concatenate
+     * deltas in order and stop on `final`. Independent of [responses],
+     * which still surfaces the single full response when the backend
+     * doesn't stream.
+     */
+    private val _chunks = MutableSharedFlow<ai.openclaw.jarvis.protocol.model.OpenClawResponseChunk>(
+        extraBufferCapacity = 64,
+    )
+    val chunks: SharedFlow<ai.openclaw.jarvis.protocol.model.OpenClawResponseChunk> = _chunks.asSharedFlow()
+
     init {
         client.rawFrames.onEach { raw -> dispatchInbound(raw) }.launchIn(scope)
     }
@@ -106,7 +118,15 @@ class OpenClawProtocolClient @Inject constructor(
         when (envelope.type) {
             OpenClawResponse.TYPE -> handleResponse(raw)
             OpenClawSkillManifest.TYPE -> handleSkillManifest(raw)
+            ai.openclaw.jarvis.protocol.model.OpenClawResponseChunk.TYPE -> handleChunk(raw)
             else -> Unit
+        }
+    }
+
+    private fun handleChunk(raw: String) {
+        when (val r = validator.parseResponseChunk(raw)) {
+            is ProtocolResult.Ok -> _chunks.tryEmit(r.value)
+            is ProtocolResult.Rejected -> _malformed.tryEmit(r.error)
         }
     }
 
