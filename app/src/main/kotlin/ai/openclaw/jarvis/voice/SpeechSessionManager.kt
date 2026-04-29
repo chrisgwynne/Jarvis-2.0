@@ -227,14 +227,15 @@ class SpeechSessionManager @Inject constructor(
             performIdentityCheck(prefs)
         }
 
-        // 2. STT
+        // 2. STT — must run on main thread (SpeechRecognizer API requirement)
         stateMachine.transition(AssistantState.CAPTURING_COMMAND, "stt start")
         var finalText = ""
         try {
-            stt.listen().collect { event ->
-                if (interrupted) return@collect
-                when (event) {
-                    is SttEvent.Partial -> {
+            withContext(Dispatchers.Main) {
+                stt.listen().collect { event ->
+                    if (interrupted) return@collect
+                    when (event) {
+                        is SttEvent.Partial -> {
                         _partialText.value = event.text
                         // Barge-in: if the assistant is currently speaking
                         // and the user says stop / wait / cancel, kill TTS
@@ -643,11 +644,13 @@ class SpeechSessionManager @Inject constructor(
     private suspend fun captureUtterance(): String? {
         var result: String? = null
         try {
-            stt.listen().collect { event ->
-                when (event) {
-                    is SttEvent.Final -> result = event.text
-                    is SttEvent.Error -> return@collect
-                    else -> Unit
+            withContext(Dispatchers.Main) {
+                stt.listen().collect { event ->
+                    when (event) {
+                        is SttEvent.Final -> result = event.text
+                        is SttEvent.Error -> return@collect
+                        else -> Unit
+                    }
                 }
             }
         } catch (_: CancellationException) {}
