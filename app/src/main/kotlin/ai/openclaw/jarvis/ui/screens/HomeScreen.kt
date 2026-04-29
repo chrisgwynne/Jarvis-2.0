@@ -63,6 +63,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenSuggestions: () -> Unit,
     onApproveCurrentAction: () -> Unit,
+    onScreenshotProjectionRequest: ((android.content.Intent) -> Unit)? = null,
     viewModel: MainViewModel = hiltViewModel(),
 ) {
     val voiceState by viewModel.voiceState.collectAsStateWithLifecycle()
