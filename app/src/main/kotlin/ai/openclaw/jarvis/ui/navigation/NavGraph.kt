@@ -55,6 +55,7 @@ object Routes {
 fun JarvisNavGraph(
     navController: NavHostController = rememberNavController(),
     approvalsVm: PendingApprovalsViewModel = hiltViewModel(),
+    onScreenshotProjectionRequest: ((android.content.Intent) -> Unit)? = null,
 ) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -90,6 +91,7 @@ fun JarvisNavGraph(
                         onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                         onOpenSuggestions = { navController.navigate(Routes.SUGGESTIONS) },
                         onApproveCurrentAction = { navController.navigate(Routes.APPROVALS) },
+                        onScreenshotProjectionRequest = onScreenshotProjectionRequest,
                     )
                 }
                 composable(Routes.SUGGESTIONS) { SuggestionsScreen() }
