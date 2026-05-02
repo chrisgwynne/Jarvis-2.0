@@ -227,10 +227,13 @@ class AlwaysListeningService : Service() {
 
             if (wakeController.checkResult(text)) {
                 Log.i(TAG, "Wake word detected")
+                // Destroy the wake SpeechRecognizer synchronously before the
+                // session creates its own — prevents ERROR_RECOGNIZER_BUSY.
+                speechRecognizer?.destroy()
+                speechRecognizer = null
+                isListeningForWake = false
                 updateNotification("Wake word detected — listening…")
                 sessionManager.startSession(SessionTrigger.WAKE_WORD)
-                // Wake loop is stopped by observeVoiceState() when state goes non-IDLE,
-                // and restarted automatically when the session ends.
             } else {
                 scheduleNextCycle(300L, hardReset = false)
             }
@@ -293,20 +296,21 @@ class AlwaysListeningService : Service() {
      * a wake-word trigger and left the wake STT conflicting with PTT sessions.
      */
     private fun observeVoiceState() {
-        scope.launch {
+        // Main.immediate: when a session starts on the main thread, the collect
+        // lambda runs synchronously (no handler post delay) so stopWakeLoop() is
+        // called before runSession() can create a new SpeechRecognizer. Without
+        // this the wake recognizer is still alive at recognizer-create time and
+        // Android returns ERROR_RECOGNIZER_BUSY on every session attempt.
+        scope.launch(kotlinx.coroutines.Dispatchers.Main.immediate) {
             var wasIdle = true
             sessionManager.voiceState.collect { state ->
                 val isIdle = state == VoiceState.IDLE
                 when {
                     !isIdle && wasIdle -> {
-                        // Session started — release the mic immediately so the
-                        // session's own STT doesn't get ERROR_RECOGNIZER_BUSY.
-                        mainHandler.post { stopWakeLoop() }
+                        stopWakeLoop()
                         updateNotification("Active")
                     }
                     isIdle && !wasIdle -> {
-                        // Session ended — restart after a delay so we don't
-                        // immediately catch TTS audio or system sounds.
                         updateNotificationForMode(currentMode)
                         if (alwaysListeningEnabled) {
                             mainHandler.postDelayed({ startWakeLoop() }, 1_500L)

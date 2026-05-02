@@ -73,7 +73,7 @@ class EnrolmentSession @Inject constructor(
     }
 
     /** Set trust level and finalise enrolment. Returns completion message. */
-    fun setTrust(text: String): String {
+    suspend fun setTrust(text: String): String {
         if (_state.value.phase != EnrolmentPhase.AWAITING_TRUST) return "Unexpected state."
         pendingTrust = when {
             text.contains("owner",   ignoreCase = true) -> TrustLevel.OWNER

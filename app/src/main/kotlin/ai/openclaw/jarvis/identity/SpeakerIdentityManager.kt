@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ai.openclaw.jarvis.trust.TrustLevel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -28,30 +30,32 @@ class SpeakerIdentityManager @Inject constructor(
 
     // ─── Profile management ───────────────────────────────────────────────────
 
-    fun enrolProfile(
+    // VoiceEmbeddingEngine uses a naive O(n²) DFT over ~1200 frames of PCM,
+    // which blocks the main thread for several seconds. Run entirely on IO.
+    suspend fun enrolProfile(
         speakerId: String,
         displayName: String,
         trustLevel: TrustLevel,
         pcmSamples: List<ShortArray>,
     ) {
-        val embeddings = pcmSamples.map { VoiceEmbeddingEngine.computeEmbedding(it) }
-        if (embeddings.isEmpty()) return
-        val dim = embeddings[0].size
-        val avg = FloatArray(dim) { i -> embeddings.sumOf { it[i].toDouble() }.toFloat() / embeddings.size }
-        var mag = 0f
-        for (v in avg) mag += v * v
-        mag = sqrt(mag)
-        val normalized = if (mag > 1e-10f) FloatArray(dim) { avg[it] / mag } else avg
-
-        val profile = SpeakerProfile(
-            speakerId   = speakerId,
-            displayName = displayName,
-            trustLevel  = trustLevel,
-            enrolledAt  = Instant.now().toString(),
-            embedding   = normalized.toList(),
-        )
+        val profile = withContext(Dispatchers.IO) {
+            val embeddings = pcmSamples.map { VoiceEmbeddingEngine.computeEmbedding(it) }
+            if (embeddings.isEmpty()) return@withContext null
+            val dim = embeddings[0].size
+            val avg = FloatArray(dim) { i -> embeddings.sumOf { it[i].toDouble() }.toFloat() / embeddings.size }
+            var mag = 0f
+            for (v in avg) mag += v * v
+            mag = sqrt(mag)
+            val normalized = if (mag > 1e-10f) FloatArray(dim) { avg[it] / mag } else avg
+            SpeakerProfile(
+                speakerId   = speakerId,
+                displayName = displayName,
+                trustLevel  = trustLevel,
+                enrolledAt  = Instant.now().toString(),
+                embedding   = normalized.toList(),
+            ).also { saveProfile(it) }
+        } ?: return
         profiles[speakerId] = profile
-        saveProfile(profile)
         Log.i(TAG, "Enrolled profile: $speakerId ($trustLevel)")
     }
 
