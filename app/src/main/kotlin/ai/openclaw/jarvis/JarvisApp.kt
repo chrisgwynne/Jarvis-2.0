@@ -39,11 +39,12 @@ class JarvisApp : Application() {
     @Inject lateinit var incomingCallMonitor: IncomingCallMonitor
 
     override fun onCreate() {
-        super.onCreate()
-        // Android ships a stripped BouncyCastle ("BC") that doesn't support Ed25519.
-        // Remove it and insert the full library so Ed25519 key-pair generation works.
+        // Must run before super.onCreate() so Hilt-injected singletons
+        // (PairingStore) find the full BC provider rather than Android's
+        // stripped version which lacks Ed25519.
         Security.removeProvider("BC")
         Security.insertProviderAt(BouncyCastleProvider(), 1)
+        super.onCreate()
         // Advertise capabilities to Gateway before connecting
         gatewayClient.advertisedCapabilities = capabilityRegistry.toAdvertisements()
         gatewayClient.connect()
@@ -82,7 +83,7 @@ class JarvisApp : Application() {
         // "hey jarvis" works without the user needing to visit settings.
         // The service reads the setting on start and handles missing mic
         // permission gracefully (retries on ERROR_INSUFFICIENT_PERMISSIONS).
-        AlwaysListeningService.start(this)
+        try { AlwaysListeningService.start(this) } catch (_: Exception) {}
 
         // Gateway connection keepalive: foreground service that holds a Wi-Fi
         // lock and registers a network callback so the WebSocket stays connected

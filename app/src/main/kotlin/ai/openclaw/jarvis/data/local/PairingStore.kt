@@ -57,7 +57,11 @@ class PairingStore @Inject constructor(
     private fun ensureKeyPair() {
         if (prefs.getString(KEY_PRIVATE_KEY_PKCS8, null) != null) return
 
-        val kpg = KeyPairGenerator.getInstance("Ed25519", "BC")
+        val kpg = try {
+            KeyPairGenerator.getInstance("Ed25519", "BC")
+        } catch (_: Exception) {
+            KeyPairGenerator.getInstance("Ed25519")
+        }
         val kp  = kpg.generateKeyPair()
 
         // SPKI-encoded Ed25519 public key is 44 bytes.
@@ -105,10 +109,17 @@ class PairingStore @Inject constructor(
             prefs.getString(KEY_PRIVATE_KEY_PKCS8, "")!!,
             Base64.NO_WRAP,
         )
-        val privateKey = KeyFactory.getInstance("Ed25519", "BC")
-            .generatePrivate(PKCS8EncodedKeySpec(pkcs8Bytes))
+        val privateKey = try {
+            KeyFactory.getInstance("Ed25519", "BC")
+        } catch (_: Exception) {
+            KeyFactory.getInstance("Ed25519")
+        }.generatePrivate(PKCS8EncodedKeySpec(pkcs8Bytes))
 
-        val sig = Signature.getInstance("Ed25519", "BC").apply {
+        val sig = try {
+            Signature.getInstance("Ed25519", "BC")
+        } catch (_: Exception) {
+            Signature.getInstance("Ed25519")
+        }.apply {
             initSign(privateKey)
             update(payload.toByteArray(Charsets.UTF_8))
         }.sign()
