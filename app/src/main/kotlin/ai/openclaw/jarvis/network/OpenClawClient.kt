@@ -113,6 +113,21 @@ class OpenClawClient @Inject constructor(
 
     var advertisedCapabilities: List<NodeCapabilityAd> = emptyList()
 
+    init {
+        // Restart the connection whenever backendMode changes so switching between
+        // OpenClaw and Hermes in settings takes effect immediately.
+        scope.launch {
+            settingsStore.settings
+                .map { it.backendMode }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    disconnect()
+                    connect()
+                }
+        }
+    }
+
     // ─── Public API ───────────────────────────────────────────────────────────
 
     fun connect() {
@@ -203,6 +218,7 @@ class OpenClawClient @Inject constructor(
         var attempt = 0
         while (currentCoroutineContext().isActive) {
             val settings = settingsStore.settings.first()
+            if (settings.backendMode == "hermes") break  // mode switched — init watcher will reconnect
             if (!settings.gatewayEnabled) {
                 _gatewayState.value = GatewayState.DISCONNECTED
                 delay(5_000)

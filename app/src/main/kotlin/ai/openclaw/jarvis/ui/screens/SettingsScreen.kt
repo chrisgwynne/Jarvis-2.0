@@ -413,14 +413,16 @@ private fun ConnectionSection(
         }
     }
 
-    Spacer(Modifier.height(4.dp))
-    Button(
-        onClick  = onOpenDiagnostics,
-        colors   = ButtonDefaults.buttonColors(containerColor = CobaltBright.copy(alpha = 0.15f), contentColor = CobaltBright),
-        modifier = Modifier.fillMaxWidth(),
-        shape    = RoundedCornerShape(10.dp),
-    ) {
-        Text("Open Connection Diagnostics", fontSize = 14.sp)
+    if (settings.backendMode == "openclaw") {
+        Spacer(Modifier.height(4.dp))
+        Button(
+            onClick  = onOpenDiagnostics,
+            colors   = ButtonDefaults.buttonColors(containerColor = CobaltBright.copy(alpha = 0.15f), contentColor = CobaltBright),
+            modifier = Modifier.fillMaxWidth(),
+            shape    = RoundedCornerShape(10.dp),
+        ) {
+            Text("Open Connection Diagnostics", fontSize = 14.sp)
+        }
     }
 }
 
@@ -866,9 +868,13 @@ private fun DiagnosticsSection(
     settings: JarvisSettings,
     vm: SettingsViewModel,
 ) {
+    val isHermes = settings.backendMode == "hermes"
     SettingsGroup("Device") {
         InfoRow("Device ID", vm.deviceId)
-        InfoRow("Paired with OpenClaw", if (vm.isPaired) "Yes" else "No")
+        InfoRow("Backend", if (isHermes) "HermesAgent" else "OpenClaw")
+        if (!isHermes) {
+            InfoRow("Paired with OpenClaw", if (vm.isPaired) "Yes" else "No")
+        }
     }
     Spacer(Modifier.height(4.dp))
     SettingsGroup("Debug") {
@@ -878,14 +884,16 @@ private fun DiagnosticsSection(
             value       = settings.debugLogsEnabled,
             onChange    = vm::updateDebugLogs,
         )
-        Spacer(Modifier.height(4.dp))
-        OutlinedButton(
-            onClick  = vm::clearPairing,
-            modifier = Modifier.fillMaxWidth(),
-            colors   = ButtonDefaults.outlinedButtonColors(contentColor = StatusOffline),
-            border   = BorderStroke(1.dp, StatusOffline.copy(alpha = 0.5f)),
-        ) {
-            Text("Clear pairing token", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        if (!isHermes) {
+            Spacer(Modifier.height(4.dp))
+            OutlinedButton(
+                onClick  = vm::clearPairing,
+                modifier = Modifier.fillMaxWidth(),
+                colors   = ButtonDefaults.outlinedButtonColors(contentColor = StatusOffline),
+                border   = BorderStroke(1.dp, StatusOffline.copy(alpha = 0.5f)),
+            ) {
+                Text("Clear pairing token", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
     Spacer(Modifier.height(4.dp))
