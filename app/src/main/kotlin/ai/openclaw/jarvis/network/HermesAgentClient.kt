@@ -12,13 +12,23 @@ import io.ktor.http.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private const val POLL_INTERVAL_MS = 500L
+private const val TIMEOUT_MS       = 30_000L
+
 /**
- * HTTP client for HermesAgent (Nous Research).
- * Communicates via the OpenAI-compatible REST API at /v1/chat/completions.
- * Maintains local conversation history per session.
+ * Client for the Hermes relay server running on the Linux machine.
+ *
+ * Protocol:
+ *   POST /session  { "text": "...", "timestamp": "ISO" }  → { "session_id": "uuid" }
+ *   GET  /session/{id}  202 → { "status": "processing" }
+ *                        200 → { "status": "ready", "response": "..." }
+ *   GET  /health                                           → { "status": "ok" }
+ *
+ * The relay URL (Tailscale hostname + port 8765) is user-configured in Settings → Connection.
  */
 @Singleton
 class HermesAgentClient @Inject constructor(
@@ -37,10 +47,9 @@ class HermesAgentClient @Inject constructor(
 
     private val httpClient = HttpClient(CIO) {
         install(Logging) { level = LogLevel.INFO }
-        engine { requestTimeout = 120_000 }
+        engine { requestTimeout = 35_000 }
     }
 
-    private val conversationHistory = mutableListOf<JsonObject>()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var healthJob: Job? = null
 
@@ -50,7 +59,7 @@ class HermesAgentClient @Inject constructor(
         healthJob?.cancel()
         _gatewayState.value = GatewayState.CONNECTING
         healthJob = scope.launch {
-            checkHealth()          // immediate check on connect
+            checkHealth()
             while (isActive) {
                 delay(30_000)
                 checkHealth()
@@ -66,8 +75,6 @@ class HermesAgentClient @Inject constructor(
 
     fun isConnected(): Boolean = _gatewayState.value == GatewayState.CONNECTED
 
-    fun clearHistory() = conversationHistory.clear()
-
     // ─── Health check ─────────────────────────────────────────────────────────
 
     private suspend fun checkHealth() {
@@ -82,84 +89,93 @@ class HermesAgentClient @Inject constructor(
             if (resp.status.isSuccess()) {
                 if (_gatewayState.value != GatewayState.CONNECTED) {
                     _gatewayState.value = GatewayState.CONNECTED
-                    _events.tryEmit(GatewayEvent.Connected("hermes-session", null))
+                    _events.tryEmit(GatewayEvent.Connected("hermes-relay", null))
                 }
             } else {
-                setDisconnected()
+                markDisconnected()
             }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            setDisconnected()
+            markDisconnected()
         }
     }
 
-    private fun setDisconnected() {
+    private fun markDisconnected() {
         if (_gatewayState.value == GatewayState.CONNECTED) {
-            _events.tryEmit(GatewayEvent.Disconnected("Hermes unreachable"))
+            _events.tryEmit(GatewayEvent.Disconnected("Relay unreachable"))
         }
         _gatewayState.value = GatewayState.DISCONNECTED
     }
 
-    // ─── Send message ─────────────────────────────────────────────────────────
+    // ─── Send message → relay → poll → TTS ───────────────────────────────────
 
     suspend fun sendMessage(text: String, eventId: String) {
         val settings = settingsStore.settings.first()
         val baseUrl  = settings.hermesUrl.trimEnd('/')
-        val apiKey   = settings.hermesApiKey
-        val sessionId = settings.sessionKey
 
-        conversationHistory.add(buildJsonObject {
-            put("role", "user")
-            put("content", text)
-        })
+        // 1. POST /session
+        val body = buildJsonObject {
+            put("text", text)
+            put("timestamp", Instant.now().toString())
+        }.toString()
 
-        val requestBody = buildJsonObject {
-            put("model", "hermes-agent")
-            putJsonArray("messages") { conversationHistory.forEach { add(it) } }
-            put("stream", false)
-        }
-        _rawFrames.tryEmit(requestBody.toString())
+        _rawFrames.tryEmit(body)
 
-        try {
-            val response = httpClient.post("$baseUrl/v1/chat/completions") {
+        val sessionId = try {
+            val resp    = httpClient.post("$baseUrl/session") {
                 contentType(ContentType.Application.Json)
-                if (apiKey.isNotBlank()) header("Authorization", "Bearer $apiKey")
-                header("X-Hermes-Session-Id", sessionId)
-                setBody(requestBody.toString())
+                setBody(body)
             }
-
-            val body = response.bodyAsText()
-            _rawFrames.tryEmit(body)
-
-            val content = json.parseToJsonElement(body).jsonObject["choices"]
-                ?.jsonArray?.firstOrNull()?.jsonObject
-                ?.get("message")?.jsonObject
-                ?.get("content")?.jsonPrimitive?.contentOrNull ?: ""
-
-            if (content.isNotBlank()) {
-                conversationHistory.add(buildJsonObject {
-                    put("role", "assistant")
-                    put("content", content)
-                })
-                _events.tryEmit(GatewayEvent.AssistantReply(
-                    GatewayResponseFrame(
-                        type        = "chat.response",
-                        text        = content,
-                        spokenReply = content,
-                        eventId     = eventId,
-                    )
-                ))
-            }
-
-            if (_gatewayState.value != GatewayState.CONNECTED) {
-                _gatewayState.value = GatewayState.CONNECTED
-                _events.tryEmit(GatewayEvent.Connected("hermes-session", null))
-            }
+            val respText = resp.bodyAsText()
+            _rawFrames.tryEmit(respText)
+            json.parseToJsonElement(respText).jsonObject["session_id"]
+                ?.jsonPrimitive?.contentOrNull
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _events.tryEmit(GatewayEvent.Error("Hermes error: ${e.message}"))
+            _events.tryEmit(GatewayEvent.Error("Relay POST failed: ${e.message}"))
+            return
         }
+
+        if (sessionId.isNullOrBlank()) {
+            _events.tryEmit(GatewayEvent.Error("Relay returned no session_id"))
+            return
+        }
+
+        // 2. Poll GET /session/{id} until ready or timeout
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            delay(POLL_INTERVAL_MS)
+            try {
+                val poll     = httpClient.get("$baseUrl/session/$sessionId")
+                val pollText = poll.bodyAsText()
+                _rawFrames.tryEmit(pollText)
+                val pollJson = json.parseToJsonElement(pollText).jsonObject
+                val status   = pollJson["status"]?.jsonPrimitive?.contentOrNull
+
+                if (status == "ready") {
+                    val response = pollJson["response"]?.jsonPrimitive?.contentOrNull ?: ""
+                    if (response.isNotBlank()) {
+                        _events.tryEmit(GatewayEvent.AssistantReply(
+                            GatewayResponseFrame(
+                                type        = "chat.response",
+                                text        = response,
+                                spokenReply = response,
+                                eventId     = eventId,
+                            )
+                        ))
+                    }
+                    return
+                }
+                // status == "processing" → keep polling
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // transient error — keep polling until deadline
+            }
+        }
+
+        _events.tryEmit(GatewayEvent.Error("Relay timeout: no response after 30s (session $sessionId)"))
     }
 }

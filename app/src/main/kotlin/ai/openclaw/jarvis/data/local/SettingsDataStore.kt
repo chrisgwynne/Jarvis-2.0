@@ -56,7 +56,7 @@ data class JarvisSettings(
     val nodeSecret: String = "",
     // Backend selection
     val backendMode: String = "openclaw",   // "openclaw" | "hermes"
-    val hermesUrl: String = "http://localhost:8642",
+    val hermesUrl: String = "http://mymachine.tailnet.ts.net:8765",
     val hermesApiKey: String = "",
 )
 
@@ -131,7 +131,7 @@ class SettingsDataStore @Inject constructor(
             wakeSuppressDuringTts     = prefs[Keys.WAKE_SUPPRESS_TTS]   ?: true,
             nodeSecret                = prefs[Keys.NODE_SECRET]          ?: "",
             backendMode               = prefs[Keys.BACKEND_MODE]          ?: "openclaw",
-            hermesUrl                 = prefs[Keys.HERMES_URL]            ?: "http://localhost:8642",
+            hermesUrl                 = prefs[Keys.HERMES_URL]            ?: "http://mymachine.tailnet.ts.net:8765",
             hermesApiKey              = prefs[Keys.HERMES_API_KEY]        ?: "",
         )
     }

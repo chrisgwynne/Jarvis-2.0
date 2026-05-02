@@ -385,37 +385,23 @@ private fun ConnectionSection(
         }
     }
 
-    // ── HermesAgent settings ───────────────────────────────────────────────────
+    // ── HermesAgent relay settings ─────────────────────────────────────────────
     if (settings.backendMode == "hermes") {
         Spacer(Modifier.height(4.dp))
-        SettingsGroup("HermesAgent") {
+        SettingsGroup("Hermes Relay") {
             DescribedToggle(
                 label       = "Backend enabled",
-                description = "Connect Jarvis to your HermesAgent instance.",
+                description = "Connect Jarvis to the Hermes relay server on your Linux machine.",
                 value       = settings.gatewayEnabled,
                 onChange    = vm::updateGatewayEnabled,
             )
             DescribedTextField(
-                label       = "Hermes URL",
-                description = "Base URL of your HermesAgent API server. Default port is 8642.",
+                label       = "Relay URL",
+                description = "Base URL of the relay server (Tailscale hostname + port 8765). " +
+                    "E.g. http://mymachine.tailnet.ts.net:8765 or http://100.x.x.x:8765",
                 value       = settings.hermesUrl,
-                hint        = "http://192.168.1.x:8642",
+                hint        = "http://mymachine.tailnet.ts.net:8765",
                 onChange    = vm::updateHermesUrl,
-            )
-            DescribedTextField(
-                label       = "API key",
-                description = "Bearer token if your HermesAgent server requires authentication (API_SERVER_KEY). Leave blank for local-only installs.",
-                value       = settings.hermesApiKey,
-                hint        = "optional",
-                onChange    = vm::updateHermesApiKey,
-                isPassword  = true,
-            )
-            DescribedTextField(
-                label       = "Session ID",
-                description = "Sent as X-Hermes-Session-Id header to maintain conversation context across requests.",
-                value       = settings.sessionKey,
-                hint        = "jarvis:user:android",
-                onChange    = vm::updateSessionKey,
             )
             DescribedTextField(
                 label       = "Speaker name",
