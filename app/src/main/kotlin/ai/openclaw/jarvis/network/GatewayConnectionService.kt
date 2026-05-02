@@ -21,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -159,9 +160,8 @@ class GatewayConnectionService : Service() {
 
     private fun observeGatewayState() {
         scope.launch {
-            val backendName = kotlinx.coroutines.flow.first(settingsStore.settings).let {
-                if (it.backendMode == "hermes") "HermesAgent" else "OpenClaw"
-            }
+            val backendName = if (settingsStore.settings.first().backendMode == "hermes")
+                "HermesAgent" else "OpenClaw"
             openClawClient.gatewayState.collect { state ->
                 val text = when (state) {
                     GatewayState.CONNECTED      -> "Connected to $backendName"
