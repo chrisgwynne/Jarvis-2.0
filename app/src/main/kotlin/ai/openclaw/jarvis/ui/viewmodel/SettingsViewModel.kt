@@ -70,5 +70,8 @@ class SettingsViewModel @Inject constructor(
     fun updateWakeConfirmSound(v: Boolean)   = viewModelScope.launch { store.updateWakeConfirmSound(v) }
     fun updateWakeSuppressTts(v: Boolean)    = viewModelScope.launch { store.updateWakeSuppressTts(v) }
     fun updateNodeSecret(v: String)          = viewModelScope.launch { store.updateNodeSecret(v) }
+    fun updateBackendMode(v: String)         = viewModelScope.launch { store.updateBackendMode(v) }
+    fun updateHermesUrl(v: String)           = viewModelScope.launch { store.updateHermesUrl(v) }
+    fun updateHermesApiKey(v: String)        = viewModelScope.launch { store.updateHermesApiKey(v) }
     fun clearPairing()                       = pairingStore.clearPairing()
 }

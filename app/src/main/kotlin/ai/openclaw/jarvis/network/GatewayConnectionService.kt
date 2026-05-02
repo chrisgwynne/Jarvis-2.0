@@ -45,6 +45,7 @@ import javax.inject.Inject
 class GatewayConnectionService : Service() {
 
     @Inject lateinit var openClawClient: OpenClawClient
+    @Inject lateinit var settingsStore: ai.openclaw.jarvis.data.local.SettingsDataStore
 
     companion object {
         const val ACTION_START = "ai.openclaw.jarvis.ACTION_START_GATEWAY"
@@ -158,12 +159,15 @@ class GatewayConnectionService : Service() {
 
     private fun observeGatewayState() {
         scope.launch {
+            val backendName = kotlinx.coroutines.flow.first(settingsStore.settings).let {
+                if (it.backendMode == "hermes") "HermesAgent" else "OpenClaw"
+            }
             openClawClient.gatewayState.collect { state ->
                 val text = when (state) {
-                    GatewayState.CONNECTED      -> "Connected to OpenClaw"
-                    GatewayState.CONNECTING     -> "Connecting to OpenClaw…"
+                    GatewayState.CONNECTED      -> "Connected to $backendName"
+                    GatewayState.CONNECTING     -> "Connecting to $backendName…"
                     GatewayState.PAIRING        -> "Waiting for approval…"
-                    GatewayState.DISCONNECTED   -> "Reconnecting to OpenClaw…"
+                    GatewayState.DISCONNECTED   -> "Reconnecting to $backendName…"
                     GatewayState.OFFLINE_QUEUED -> "Offline — commands queued"
                 }
                 updateNotification(text)

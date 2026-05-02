@@ -54,6 +54,10 @@ data class JarvisSettings(
     val wakeSuppressDuringTts: Boolean = true,
     // Gateway auth
     val nodeSecret: String = "",
+    // Backend selection
+    val backendMode: String = "openclaw",   // "openclaw" | "hermes"
+    val hermesUrl: String = "http://localhost:8642",
+    val hermesApiKey: String = "",
 )
 
 @Singleton
@@ -91,6 +95,9 @@ class SettingsDataStore @Inject constructor(
         val WAKE_CONFIRM_SOUND      = booleanPreferencesKey("wake_confirm_sound")
         val WAKE_SUPPRESS_TTS       = booleanPreferencesKey("wake_suppress_during_tts")
         val NODE_SECRET             = stringPreferencesKey("node_secret")
+        val BACKEND_MODE            = stringPreferencesKey("backend_mode")
+        val HERMES_URL              = stringPreferencesKey("hermes_url")
+        val HERMES_API_KEY          = stringPreferencesKey("hermes_api_key")
     }
 
     val settings: Flow<JarvisSettings> = store.data.map { prefs ->
@@ -123,6 +130,9 @@ class SettingsDataStore @Inject constructor(
             wakeConfirmSound          = prefs[Keys.WAKE_CONFIRM_SOUND]  ?: true,
             wakeSuppressDuringTts     = prefs[Keys.WAKE_SUPPRESS_TTS]   ?: true,
             nodeSecret                = prefs[Keys.NODE_SECRET]          ?: "",
+            backendMode               = prefs[Keys.BACKEND_MODE]          ?: "openclaw",
+            hermesUrl                 = prefs[Keys.HERMES_URL]            ?: "http://localhost:8642",
+            hermesApiKey              = prefs[Keys.HERMES_API_KEY]        ?: "",
         )
     }
 
@@ -154,4 +164,7 @@ class SettingsDataStore @Inject constructor(
     suspend fun updateWakeConfirmSound(v: Boolean)   = store.edit { it[Keys.WAKE_CONFIRM_SOUND]   = v }
     suspend fun updateWakeSuppressTts(v: Boolean)    = store.edit { it[Keys.WAKE_SUPPRESS_TTS]    = v }
     suspend fun updateNodeSecret(v: String)          = store.edit { it[Keys.NODE_SECRET]          = v }
+    suspend fun updateBackendMode(v: String)         = store.edit { it[Keys.BACKEND_MODE]         = v }
+    suspend fun updateHermesUrl(v: String)           = store.edit { it[Keys.HERMES_URL]           = v }
+    suspend fun updateHermesApiKey(v: String)        = store.edit { it[Keys.HERMES_API_KEY]       = v }
 }

@@ -93,11 +93,16 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // ── Connection ─────────────────────────────────────────────────────
+            val backendLabel = if (settings.backendMode == "hermes") "HermesAgent" else "OpenClaw"
+            val connectionStatus = if (settings.gatewayEnabled) {
+                val url = if (settings.backendMode == "hermes") settings.hermesUrl else settings.gatewayUrl
+                "$backendLabel • $url"
+            } else "Disabled"
             HubCard(
                 title  = "Connection",
-                status = if (settings.gatewayEnabled) "Enabled • ${settings.gatewayUrl}" else "Disabled",
+                status = connectionStatus,
                 statusColor = if (settings.gatewayEnabled) StatusConnected else TextDim,
-                description = "Configure the OpenClaw gateway URL, device name, and session key.",
+                description = "Choose backend ($backendLabel) and configure connection settings.",
                 onClick = { activeSection = SettingsSection.CONNECTION },
             )
 
@@ -300,51 +305,128 @@ private fun ConnectionSection(
     vm: SettingsViewModel,
     onOpenDiagnostics: () -> Unit = {},
 ) {
-    SettingsGroup("Gateway") {
-        DescribedToggle(
-            label       = "Gateway enabled",
-            description = "Connect Jarvis to the OpenClaw server on your local network or via Tailscale.",
-            value       = settings.gatewayEnabled,
-            onChange    = vm::updateGatewayEnabled,
-        )
-        DescribedTextField(
-            label       = "Gateway URL",
-            description = "Full WebSocket URL. Local: ws://192.168.1.x:PORT  " +
-                "Tailscale: ws://100.x.x.x:PORT  Secure: wss://domain:PORT/path",
-            value       = settings.gatewayUrl,
-            hint        = "ws://192.168.1.100:8765",
-            onChange    = vm::updateGatewayUrl,
-        )
-        DescribedTextField(
-            label       = "Auth token",
-            description = "Bootstrap token from your OpenClaw gateway (set in the gateway config). Required to connect.",
-            value       = settings.nodeSecret,
-            hint        = "paste token from openclaw gateway",
-            onChange    = vm::updateNodeSecret,
-            isPassword  = true,
-        )
-        DescribedTextField(
-            label       = "Device name",
-            description = "How this device identifies itself to OpenClaw.",
-            value       = settings.deviceName,
-            hint        = "Jarvis Android",
-            onChange    = vm::updateDeviceName,
-        )
-        DescribedTextField(
-            label       = "Session key",
-            description = "Routing key for this session (used by OpenClaw to route replies).",
-            value       = settings.sessionKey,
-            hint        = "jarvis:user:android",
-            onChange    = vm::updateSessionKey,
-        )
-        DescribedTextField(
-            label       = "Speaker name",
-            description = "Default name used when no voice profile is matched.",
-            value       = settings.speakerName,
-            hint        = "user",
-            onChange    = vm::updateSpeakerName,
-        )
+    // ── Backend selector ───────────────────────────────────────────────────────
+    SettingsGroup("Backend") {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Agent backend",
+                color      = TextPrimary,
+                fontWeight = FontWeight.Medium,
+                fontSize   = 14.sp,
+            )
+            Text(
+                "Choose which AI backend Jarvis connects to.",
+                color    = TextSecondary,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BackendChip(
+                    label     = "OpenClaw",
+                    selected  = settings.backendMode == "openclaw",
+                    onClick   = { vm.updateBackendMode("openclaw") },
+                )
+                BackendChip(
+                    label     = "HermesAgent",
+                    selected  = settings.backendMode == "hermes",
+                    onClick   = { vm.updateBackendMode("hermes") },
+                )
+            }
+        }
     }
+
+    // ── OpenClaw settings ──────────────────────────────────────────────────────
+    if (settings.backendMode == "openclaw") {
+        Spacer(Modifier.height(4.dp))
+        SettingsGroup("OpenClaw Gateway") {
+            DescribedToggle(
+                label       = "Gateway enabled",
+                description = "Connect Jarvis to the OpenClaw server on your local network or via Tailscale.",
+                value       = settings.gatewayEnabled,
+                onChange    = vm::updateGatewayEnabled,
+            )
+            DescribedTextField(
+                label       = "Gateway URL",
+                description = "Full WebSocket URL. Local: ws://192.168.1.x:PORT  " +
+                    "Tailscale: ws://100.x.x.x:PORT  Secure: wss://domain:PORT/path",
+                value       = settings.gatewayUrl,
+                hint        = "ws://192.168.1.100:8765",
+                onChange    = vm::updateGatewayUrl,
+            )
+            DescribedTextField(
+                label       = "Auth token",
+                description = "Bootstrap token from your OpenClaw gateway (set in the gateway config). Required to connect.",
+                value       = settings.nodeSecret,
+                hint        = "paste token from openclaw gateway",
+                onChange    = vm::updateNodeSecret,
+                isPassword  = true,
+            )
+            DescribedTextField(
+                label       = "Device name",
+                description = "How this device identifies itself to OpenClaw.",
+                value       = settings.deviceName,
+                hint        = "Jarvis Android",
+                onChange    = vm::updateDeviceName,
+            )
+            DescribedTextField(
+                label       = "Session key",
+                description = "Routing key for this session (used by OpenClaw to route replies).",
+                value       = settings.sessionKey,
+                hint        = "jarvis:user:android",
+                onChange    = vm::updateSessionKey,
+            )
+            DescribedTextField(
+                label       = "Speaker name",
+                description = "Default name used when no voice profile is matched.",
+                value       = settings.speakerName,
+                hint        = "user",
+                onChange    = vm::updateSpeakerName,
+            )
+        }
+    }
+
+    // ── HermesAgent settings ───────────────────────────────────────────────────
+    if (settings.backendMode == "hermes") {
+        Spacer(Modifier.height(4.dp))
+        SettingsGroup("HermesAgent") {
+            DescribedToggle(
+                label       = "Backend enabled",
+                description = "Connect Jarvis to your HermesAgent instance.",
+                value       = settings.gatewayEnabled,
+                onChange    = vm::updateGatewayEnabled,
+            )
+            DescribedTextField(
+                label       = "Hermes URL",
+                description = "Base URL of your HermesAgent API server. Default port is 8642.",
+                value       = settings.hermesUrl,
+                hint        = "http://192.168.1.x:8642",
+                onChange    = vm::updateHermesUrl,
+            )
+            DescribedTextField(
+                label       = "API key",
+                description = "Bearer token if your HermesAgent server requires authentication (API_SERVER_KEY). Leave blank for local-only installs.",
+                value       = settings.hermesApiKey,
+                hint        = "optional",
+                onChange    = vm::updateHermesApiKey,
+                isPassword  = true,
+            )
+            DescribedTextField(
+                label       = "Session ID",
+                description = "Sent as X-Hermes-Session-Id header to maintain conversation context across requests.",
+                value       = settings.sessionKey,
+                hint        = "jarvis:user:android",
+                onChange    = vm::updateSessionKey,
+            )
+            DescribedTextField(
+                label       = "Speaker name",
+                description = "Default name used when no voice profile is matched.",
+                value       = settings.speakerName,
+                hint        = "user",
+                onChange    = vm::updateSpeakerName,
+            )
+        }
+    }
+
     Spacer(Modifier.height(4.dp))
     Button(
         onClick  = onOpenDiagnostics,
@@ -353,6 +435,23 @@ private fun ConnectionSection(
         shape    = RoundedCornerShape(10.dp),
     ) {
         Text("Open Connection Diagnostics", fontSize = 14.sp)
+    }
+}
+
+@Composable
+private fun BackendChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val bg     = if (selected) CobaltBright else CobaltBright.copy(alpha = 0.08f)
+    val fg     = if (selected) Color.Black  else TextSecondary
+    val border = if (selected) CobaltBright else CobaltBright.copy(alpha = 0.25f)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .border(BorderStroke(1.dp, border), RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(label, color = fg, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
 }
 

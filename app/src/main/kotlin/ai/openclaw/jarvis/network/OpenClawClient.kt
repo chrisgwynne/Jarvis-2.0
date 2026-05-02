@@ -54,6 +54,7 @@ sealed class GatewayEvent {
 class OpenClawClient @Inject constructor(
     private val settingsStore: SettingsDataStore,
     private val pairingStore: PairingStore,
+    private val hermesClient: HermesAgentClient,
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -115,16 +116,32 @@ class OpenClawClient @Inject constructor(
     // ─── Public API ───────────────────────────────────────────────────────────
 
     fun connect() {
-        if (isConnecting.getAndSet(true)) return
         connectJob?.cancel()
-        connectJob = scope.launch { connectWithBackoff() }
+        connectJob = scope.launch {
+            val mode = settingsStore.settings.first().backendMode
+            if (mode == "hermes") {
+                launch { hermesClient.gatewayState.collect { _gatewayState.value = it } }
+                launch { hermesClient.events.collect { _events.tryEmit(it) } }
+                launch { hermesClient.rawFrames.collect { _rawFrames.tryEmit(it) } }
+                hermesClient.connect()
+                awaitCancellation()
+            } else {
+                if (isConnecting.getAndSet(true)) return@launch
+                connectWithBackoff()
+            }
+        }
     }
 
     fun disconnect() {
         connectJob?.cancel()
         scope.launch {
-            wsSession?.close(CloseReason(CloseReason.Codes.NORMAL, "User disconnect"))
-            _gatewayState.value = GatewayState.DISCONNECTED
+            val mode = settingsStore.settings.first().backendMode
+            if (mode == "hermes") {
+                hermesClient.disconnect()
+            } else {
+                wsSession?.close(CloseReason(CloseReason.Codes.NORMAL, "User disconnect"))
+                _gatewayState.value = GatewayState.DISCONNECTED
+            }
         }
         isConnecting.set(false)
     }
@@ -136,30 +153,42 @@ class OpenClawClient @Inject constructor(
         speaker: String? = null,
         trustLevel: String? = null,
         identityConfidence: Float? = null,
-    ) = sendRaw(json.encodeToString(UserMessageFrame(
-        sessionKey         = sessionKey,
-        text               = text,
-        eventId            = eventId,
-        speaker            = speaker,
-        trustLevel         = trustLevel,
-        identityConfidence = identityConfidence,
-    )))
+    ) {
+        if (settingsStore.settings.first().backendMode == "hermes") {
+            hermesClient.sendMessage(text, eventId)
+            return
+        }
+        sendRaw(json.encodeToString(UserMessageFrame(
+            sessionKey         = sessionKey,
+            text               = text,
+            eventId            = eventId,
+            speaker            = speaker,
+            trustLevel         = trustLevel,
+            identityConfidence = identityConfidence,
+        )))
+    }
 
     suspend fun sendChatMessage(
         text: String,
         sessionKey: String,
         eventId: String,
         imageBase64: String? = null,
-    ) = sendRaw(json.encodeToString(ChatSendFrame(
-        id = eventId,
-        params = ChatSendParams(
-            sessionKey            = sessionKey,
-            message               = text,
-            idempotencyKey        = eventId,
-            systemInputProvenance = SystemInputProvenance(),
-            imageBase64           = imageBase64,
-        ),
-    )))
+    ) {
+        if (settingsStore.settings.first().backendMode == "hermes") {
+            hermesClient.sendMessage(text, eventId)
+            return
+        }
+        sendRaw(json.encodeToString(ChatSendFrame(
+            id = eventId,
+            params = ChatSendParams(
+                sessionKey            = sessionKey,
+                message               = text,
+                idempotencyKey        = eventId,
+                systemInputProvenance = SystemInputProvenance(),
+                imageBase64           = imageBase64,
+            ),
+        )))
+    }
 
 
     suspend fun sendSessionEvent(event: SessionEvent) = sendRaw(json.encodeToString(event))
