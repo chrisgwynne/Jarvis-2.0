@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Jarvis</string>
+
+    <!-- Screen Awareness accessibility service (optional capability) -->
+    <string name="screen_awareness_service_summary">Lets Jarvis understand what\'s on screen so it can offer help without asking.</string>
+    <string name="screen_awareness_service_description">Reads visible text, page titles and URLs from the foreground app to power context-aware suggestions. Banking, password and authenticator apps are always excluded. Disabled by default.</string>
+</resources>

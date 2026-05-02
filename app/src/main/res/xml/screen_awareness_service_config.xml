@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Accessibility-service config for the Screen Awareness layer.
+  Subscribes to window-state and content-change events on every package
+  so we can derive context across the user's apps. Filtering and the
+  sensitive-app exclusion happens in code (see ScreenAwarenessService),
+  not here, so the config can stay generic.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:notificationTimeout="500"
+    android:canRetrieveWindowContent="true"
+    android:settingsActivity="ai.openclaw.jarvis.MainActivity"
+    android:summary="@string/screen_awareness_service_summary"
+    android:description="@string/screen_awareness_service_description" />
