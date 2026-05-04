@@ -43,6 +43,7 @@ class SpeechSessionManager @Inject constructor(
     private val commRouter: CommunicationRouter,
     private val executor: AndroidActionExecutor,
     private val client: OpenClawClient,
+    private val hermesClient: ai.openclaw.jarvis.network.HermesClient,
     private val logger: SessionEventLogger,
     private val audioRouter: AudioRouteManager,
     private val settings: SettingsDataStore,
@@ -500,6 +501,11 @@ class SpeechSessionManager @Inject constructor(
             }
 
             IntentType.SCREEN_CAPTURE -> {
+                if (prefs.hermesEnabled && prefs.hermesHostname.isNotBlank()) {
+                    stateMachine.transition(AssistantState.WAITING_OPENCLAW, "screenshot hermes")
+                    forwardToHermes(parsed.rawText, prefs)
+                    return
+                }
                 val eventId = UUID.randomUUID().toString()
                 logger.logPending(parsed.rawText, parsed.toRouteDecision(), eventId, prefs)
                 stateMachine.transition(AssistantState.WAITING_OPENCLAW, "screenshot")
@@ -538,7 +544,11 @@ class SpeechSessionManager @Inject constructor(
             IntentType.OPENCLAW_REQUEST,
             IntentType.MIXED_ACTION -> {
                 stateMachine.transition(AssistantState.WAITING_OPENCLAW, parsed.type.name)
-                forwardToOpenClaw(parsed, prefs)
+                if (prefs.hermesEnabled && prefs.hermesHostname.isNotBlank()) {
+                    forwardToHermes(parsed.rawText, prefs)
+                } else {
+                    forwardToOpenClaw(parsed, prefs)
+                }
             }
 
             // Handled before dispatch
@@ -617,6 +627,24 @@ class SpeechSessionManager @Inject constructor(
                 ),
             )
             stateMachine.transition(AssistantState.IDLE_LISTENING, "offline")
+        }
+    }
+
+    // ─── Hermes Agent forwarding ──────────────────────────────────────────────
+
+    private suspend fun forwardToHermes(text: String, prefs: JarvisSettings) {
+        val reply = hermesClient.query(text, prefs.hermesHostname)
+        if (reply != null) {
+            addTranscript("jarvis", reply, "Hermes")
+            stateMachine.transition(AssistantState.SPEAKING, "hermes reply")
+            speakIfEnabled(reply)
+            stateMachine.transition(AssistantState.IDLE_LISTENING, "hermes done")
+        } else {
+            val msg = "Hermes didn't respond in time."
+            addTranscript("jarvis", msg, "Hermes")
+            stateMachine.transition(AssistantState.ERROR_RECOVERY, "hermes timeout")
+            speakIfEnabled(msg)
+            stateMachine.transition(AssistantState.IDLE_LISTENING, "hermes error")
         }
     }
 

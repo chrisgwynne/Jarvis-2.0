@@ -63,5 +63,7 @@ class SettingsViewModel @Inject constructor(
     fun updateSessionTimeout(v: Int)         = viewModelScope.launch { store.updateSessionTimeout(v) }
     fun updateRecordingEnabled(v: Boolean)   = viewModelScope.launch { store.updateRecordingEnabled(v) }
     fun updateRecordingRetention(v: Int)     = viewModelScope.launch { store.updateRecordingRetention(v) }
+    fun updateHermesEnabled(v: Boolean)      = viewModelScope.launch { store.updateHermesEnabled(v) }
+    fun updateHermesHostname(v: String)      = viewModelScope.launch { store.updateHermesHostname(v) }
     fun clearPairing()                       = pairingStore.clearPairing()
 }

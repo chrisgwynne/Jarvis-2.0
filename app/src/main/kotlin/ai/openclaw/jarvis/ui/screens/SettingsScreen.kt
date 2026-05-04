@@ -95,6 +95,23 @@ fun SettingsScreen(
                 )
             }
 
+            // ── Hermes Agent ──────────────────────────────────────────────────
+            SettingsSection(title = "HERMES AGENT") {
+                SettingsToggle(
+                    label    = "Use Hermes instead of OpenClaw",
+                    value    = settings.hermesEnabled,
+                    onChange = viewModel::updateHermesEnabled,
+                )
+                if (settings.hermesEnabled) {
+                    SettingsTextField(
+                        label    = "Relay Hostname (Tailscale)",
+                        value    = settings.hermesHostname,
+                        hint     = "my-machine.tailnet-name.ts.net",
+                        onChange = viewModel::updateHermesHostname,
+                    )
+                }
+            }
+
             // ── Voice ──────────────────────────────────────────────────────────
             SettingsSection(title = "VOICE") {
                 SettingsToggle(

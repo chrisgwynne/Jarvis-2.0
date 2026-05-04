@@ -44,6 +44,9 @@ data class JarvisSettings(
     // Recording
     val conversationRecordingEnabled: Boolean = false,
     val recordingRetentionHours: Int = 24,
+    // Hermes Agent
+    val hermesEnabled: Boolean = false,
+    val hermesHostname: String = "",
 )
 
 @Singleton
@@ -74,6 +77,8 @@ class SettingsDataStore @Inject constructor(
         val SESSION_TIMEOUT       = stringPreferencesKey("session_timeout_minutes")
         val RECORDING_ENABLED     = booleanPreferencesKey("conversation_recording_enabled")
         val RECORDING_RETENTION   = stringPreferencesKey("recording_retention_hours")
+        val HERMES_ENABLED        = booleanPreferencesKey("hermes_enabled")
+        val HERMES_HOSTNAME       = stringPreferencesKey("hermes_hostname")
     }
 
     val settings: Flow<JarvisSettings> = store.data.map { prefs ->
@@ -99,6 +104,8 @@ class SettingsDataStore @Inject constructor(
             sessionTimeoutMinutes     = prefs[Keys.SESSION_TIMEOUT]?.toIntOrNull() ?: 15,
             conversationRecordingEnabled = prefs[Keys.RECORDING_ENABLED]   ?: false,
             recordingRetentionHours   = prefs[Keys.RECORDING_RETENTION]?.toIntOrNull() ?: 24,
+            hermesEnabled             = prefs[Keys.HERMES_ENABLED]         ?: false,
+            hermesHostname            = prefs[Keys.HERMES_HOSTNAME]        ?: "",
         )
     }
 
@@ -123,4 +130,6 @@ class SettingsDataStore @Inject constructor(
     suspend fun updateSessionTimeout(v: Int)         = store.edit { it[Keys.SESSION_TIMEOUT]     = v.toString() }
     suspend fun updateRecordingEnabled(v: Boolean)   = store.edit { it[Keys.RECORDING_ENABLED]  = v }
     suspend fun updateRecordingRetention(v: Int)     = store.edit { it[Keys.RECORDING_RETENTION] = v.toString() }
+    suspend fun updateHermesEnabled(v: Boolean)      = store.edit { it[Keys.HERMES_ENABLED]      = v }
+    suspend fun updateHermesHostname(v: String)      = store.edit { it[Keys.HERMES_HOSTNAME]     = v }
 }
